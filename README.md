@@ -13,10 +13,18 @@ Use it when you need a small, stable identifier for a .NET type:
 ## Usage
 
 ```csharp
+[TypeId(1)] sealed class LoginRequest { }
+[TypeId(2)] sealed class LoginResponse { }
+
 var registry = new TypeIdRegistry();
 
-registry.Add(typeof(LoginRequest), 1);
-registry.Add(typeof(LoginResponse), 2);
+// Register types using TypeIdAttribute:
+registry.Add(typeof(LoginRequest));
+registry.Add(typeof(LoginResponse));
+
+// Alternatively, register types with explicit IDs:
+// registry.Add(typeof(LoginRequest), 1);
+// registry.Add(typeof(LoginResponse), 2);
 
 registry.TryGetId(typeof(LoginRequest), out var id);
 registry.TryGetType(2, out var type);
@@ -33,5 +41,6 @@ typeof(LoginRequest) -> 1
 ```
 
 - A type can be mapped to only one ID, and an ID to only one type.
-- `Add` throws `ArgumentException` describing the existing registration when the type or ID is already registered. Rejected duplicate registrations leave the registry unchanged.
-- `TryGetType` and `TryGetId` return `false` for unregistered keys.
+- `Add(Type)` reads the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
+- If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
+- `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
