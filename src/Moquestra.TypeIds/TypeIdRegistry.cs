@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 
 namespace Moquestra.TypeIds
 {
@@ -29,7 +30,7 @@ namespace Moquestra.TypeIds
         /// <param name="type">The type to register. Cannot be null.</param>
         /// <param name="id">The integer ID to map to the type.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
-        /// <exception cref="ArgumentException">The type or ID is already registered.</exception>
+        /// <exception cref="ArgumentException">The type is already mapped to an ID, or the ID is already mapped to a type.</exception>
         public void Add(Type type, int id)
         {
             if (type is null)
@@ -46,11 +47,30 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
+        /// Registers a type using the ID specified by its <see cref="TypeIdAttribute"/>.
+        /// </summary>
+        /// <param name="type">The type to register. Cannot be null and must have a <see cref="TypeIdAttribute"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the type is already mapped to an ID, or the attribute's ID is already mapped to a type.</exception>
+        public void Add(Type type)
+        {
+            if (type is null)
+                throw new ArgumentNullException(nameof(type));
+
+            var attribute = type.GetCustomAttribute<TypeIdAttribute>(inherit: false);
+
+            if (attribute is null)
+                throw new ArgumentException($"Type '{type}' does not have a TypeIdAttribute.", nameof(type));
+
+            Add(type, attribute.Id);
+        }
+
+        /// <summary>
         /// Attempts to get the type mapped to the specified ID.
         /// </summary>
         /// <param name="id">The ID to look up.</param>
         /// <param name="type">The type mapped to the specified ID, or null if no mapping exists.</param>
-        /// <returns>true if the ID is registered; otherwise, false.</returns>
+        /// <returns>true if the specified ID is mapped to a type; otherwise, false.</returns>
         public bool TryGetType(int id, [NotNullWhen(true)] out Type? type)
         {
             return _typeById.TryGetValue(id, out type);
@@ -61,7 +81,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="type">The type to look up. Cannot be null.</param>
         /// <param name="id">The ID mapped to the specified type, or 0 if no mapping exists.</param>
-        /// <returns>true if the type is registered; otherwise, false.</returns>
+        /// <returns>true if the specified type is mapped to an ID; otherwise, false.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
         public bool TryGetId(Type type, out int id)
         {

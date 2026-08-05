@@ -139,5 +139,55 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.Throws<ArgumentNullException>(() => registry.TryGetId(null!, out _));
         }
+
+        [Fact]
+        public void Add_WithTypeIdAttributeOnClass_MapsSpecifiedId()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(AnnotatedMessage));
+
+            Assert.True(registry.TryGetId(typeof(AnnotatedMessage), out var id));
+
+            Assert.Equal(10, id);
+        }
+
+        [Fact]
+        public void Add_WithTypeIdAttributeOnInterface_MapsSpecifiedId()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(IAnnotatedMessage));
+
+            Assert.True(registry.TryGetId(typeof(IAnnotatedMessage), out var id));
+
+            Assert.Equal(11, id);
+        }
+
+        [Fact]
+        public void Add_WithoutTypeIdAttribute_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            var e = Assert.Throws<ArgumentException>(() => registry.Add(typeof(UnannotatedMessage)));
+
+            Assert.Contains("UnannotatedMessage", e.Message);
+        }
+
+        [Fact]
+        public void Add_WithNullTypeUsingAttributeOverload_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.Add(null!));
+        }
+
+        [TypeId(10)]
+        private sealed class AnnotatedMessage { }
+
+        [TypeId(11)]
+        private interface IAnnotatedMessage { }
+
+        private sealed class UnannotatedMessage { }
     }
 }
