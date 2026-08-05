@@ -25,6 +25,14 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Add_WithZeroId_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(string), 0));
+        }
+
+        [Fact]
         public void Add_WithDuplicateId_ThrowsWithExistingTypeInMessage()
         {
             var registry = new TypeIdRegistry();

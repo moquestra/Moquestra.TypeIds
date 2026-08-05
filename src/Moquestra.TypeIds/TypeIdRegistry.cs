@@ -28,13 +28,17 @@ namespace Moquestra.TypeIds
         /// Validation failures leave the registry state unchanged.
         /// </summary>
         /// <param name="type">The type to register. Cannot be null.</param>
-        /// <param name="id">The integer ID to map to the type.</param>
+        /// <param name="id">The integer ID to map to the type. Cannot be 0.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
-        /// <exception cref="ArgumentException">The type is already mapped to an ID, or the ID is already mapped to a type.</exception>
+        /// <exception cref="ArgumentException"><paramref name="id"/> is 0, the type is already mapped to an ID, or the ID is already mapped to a type.</exception>
         public void Add(Type type, int id)
         {
             if (type is null)
                 throw new ArgumentNullException(nameof(type));
+
+            // 0 is reserved because TryGetId returns 0 when no mapping exists.
+            if (id == 0)
+                throw new ArgumentException("ID 0 is reserved to indicate that no mapping exists.", nameof(id));
 
             if (_typeById.TryGetValue(id, out var existingType))
                 throw new ArgumentException($"ID '{id}' is already mapped to type '{existingType}'.", nameof(id));
@@ -51,7 +55,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="type">The type to register. Cannot be null and must have a <see cref="TypeIdAttribute"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
-        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the type is already mapped to an ID, or the attribute's ID is already mapped to a type.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the attribute's ID is 0, the type is already mapped to an ID, or the attribute's ID is already mapped to a type.</exception>
         public void Add(Type type)
         {
             if (type is null)
@@ -71,7 +75,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="assembly">The assembly to scan. Cannot be null.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is null.</exception>
-        /// <exception cref="ArgumentException">A scanned type is already mapped to an ID, or its ID is already mapped to a type.
+        /// <exception cref="ArgumentException">The ID of a scanned type is 0, the type is already mapped to an ID, or its ID is already mapped to a type.
         /// Types registered before the exception remain in the registry.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
