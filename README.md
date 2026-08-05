@@ -18,11 +18,14 @@ Use it when you need a small, stable identifier for a .NET type:
 
 var registry = new TypeIdRegistry();
 
-// Register types using TypeIdAttribute:
-registry.Add(typeof(LoginRequest));
-registry.Add(typeof(LoginResponse));
+// Register every type in the assembly that has a TypeIdAttribute:
+registry.AddFromAssembly(typeof(LoginRequest).Assembly);
 
-// Alternatively, register types with explicit IDs:
+// Or register types one by one using TypeIdAttribute:
+// registry.Add(typeof(LoginRequest));
+// registry.Add(typeof(LoginResponse));
+
+// Or register types with explicit IDs:
 // registry.Add(typeof(LoginRequest), 1);
 // registry.Add(typeof(LoginResponse), 2);
 
@@ -42,5 +45,6 @@ typeof(LoginRequest) -> 1
 
 - A type can be mapped to only one ID, and an ID to only one type.
 - `Add(Type)` reads the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
+- `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
 - If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
 - `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
