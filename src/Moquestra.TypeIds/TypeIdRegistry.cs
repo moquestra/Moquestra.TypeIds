@@ -66,6 +66,30 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
+        /// Registers every type in the assembly that has a <see cref="TypeIdAttribute"/>.
+        /// Types without the attribute are ignored.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan. Cannot be null.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is null.</exception>
+        /// <exception cref="ArgumentException">A scanned type is already mapped to an ID, or its ID is already mapped to a type.
+        /// Types registered before the exception remain in the registry.</exception>
+        public void AddFromAssembly(Assembly assembly)
+        {
+            if (assembly is null)
+                throw new ArgumentNullException(nameof(assembly));
+
+            foreach (var type in assembly.GetTypes())
+            {
+                var attribute = type.GetCustomAttribute<TypeIdAttribute>(inherit: false);
+
+                if (attribute is null)
+                    continue;
+
+                Add(type, attribute.Id);
+            }
+        }
+
+        /// <summary>
         /// Attempts to get the type mapped to the specified ID.
         /// </summary>
         /// <param name="id">The ID to look up.</param>

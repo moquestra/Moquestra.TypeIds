@@ -182,6 +182,50 @@ namespace Moquestra.TypeIds.Tests
             Assert.Throws<ArgumentNullException>(() => registry.Add(null!));
         }
 
+        [Fact]
+        public void AddFromAssembly_WithNullAssembly_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.AddFromAssembly(null!));
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithTestAssembly_RegistersAnnotatedTypes()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly);
+
+            Assert.True(registry.TryGetId(typeof(AnnotatedMessage), out var classId));
+
+            Assert.Equal(10, classId);
+
+            Assert.True(registry.TryGetId(typeof(IAnnotatedMessage), out var interfaceId));
+
+            Assert.Equal(11, interfaceId);
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithTestAssembly_IgnoresUnannotatedTypes()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly);
+
+            Assert.False(registry.TryGetId(typeof(UnannotatedMessage), out _));
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithConflictingExistingMapping_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(string), 10);
+
+            Assert.Throws<ArgumentException>(() => registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly));
+        }
+
         [TypeId(10)]
         private sealed class AnnotatedMessage { }
 

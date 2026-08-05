@@ -15,14 +15,17 @@ namespace Moquestra.TypeIds.Sample
         {
             var registry = new TypeIdRegistry();
 
-            // Register types using TypeIdAttribute:
-            registry.Add(typeof(LoginRequest));
-            registry.Add(typeof(LoginResponse));
-            registry.Add(typeof(LogoutRequest));
-            registry.Add(typeof(LogoutResponse));
-            registry.Add(typeof(TimeSyncCommand));
+            // Register every type in the assembly that has a TypeIdAttribute:
+            registry.AddFromAssembly(typeof(LoginRequest).Assembly);
 
-            // Alternatively, register types with explicit IDs:
+            // Or register types one by one using TypeIdAttribute:
+            // registry.Add(typeof(LoginRequest));
+            // registry.Add(typeof(LoginResponse));
+            // registry.Add(typeof(LogoutRequest));
+            // registry.Add(typeof(LogoutResponse));
+            // registry.Add(typeof(TimeSyncCommand));
+
+            // Or register types with explicit IDs:
             // registry.Add(typeof(LoginRequest), 1);
             // registry.Add(typeof(LoginResponse), 2);
             // registry.Add(typeof(LogoutRequest), 3);
