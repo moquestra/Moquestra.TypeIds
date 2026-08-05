@@ -9,6 +9,9 @@ namespace Moquestra.TypeIds.Sample
     [TypeId(4)] internal sealed class LogoutResponse { }
     [TypeId(5)] internal sealed class TimeSyncCommand { }
 
+    // When omitted, the ID is computed from the type's full name and is always negative:
+    [TypeId] internal sealed class HeartbeatCommand { }
+
     internal static class Program
     {
         private static void Main()
@@ -24,6 +27,7 @@ namespace Moquestra.TypeIds.Sample
             // registry.Add(typeof(LogoutRequest));
             // registry.Add(typeof(LogoutResponse));
             // registry.Add(typeof(TimeSyncCommand));
+            // registry.Add(typeof(HeartbeatCommand));
 
             // Or register types with explicit IDs:
             // registry.Add(typeof(LoginRequest), 1);
@@ -33,9 +37,11 @@ namespace Moquestra.TypeIds.Sample
             // registry.Add(typeof(TimeSyncCommand), 5);
 
             registry.TryGetId(typeof(LoginRequest), out var id);
+            registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
             registry.TryGetType(2, out var type);
 
             Console.WriteLine($"typeof(LoginRequest) -> {id}");
+            Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
             Console.WriteLine($"2 -> {type}");
         }
     }

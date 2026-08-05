@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.InteropServices;
+
+using Moquestra.TypeIds.Hashing;
 
 namespace Moquestra.TypeIds
 {
@@ -55,7 +58,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="type">The type to register. Cannot be null and must have a <see cref="TypeIdAttribute"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
-        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the attribute's ID is 0, the type is already mapped to an ID, or the attribute's ID is already mapped to a type.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, a computed ID is required but the type has no full name, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
         public void Add(Type type)
         {
             if (type is null)
@@ -66,7 +69,7 @@ namespace Moquestra.TypeIds
             if (attribute is null)
                 throw new ArgumentException($"Type '{type}' does not have a TypeIdAttribute.", nameof(type));
 
-            Add(type, attribute.Id);
+            Add(type, attribute.Id == 0 ? ComputeId(type) : attribute.Id);
         }
 
         /// <summary>
@@ -75,7 +78,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="assembly">The assembly to scan. Cannot be null.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is null.</exception>
-        /// <exception cref="ArgumentException">The ID of a scanned type is 0, the type is already mapped to an ID, or its ID is already mapped to a type.
+        /// <exception cref="ArgumentException">A scanned type requires a computed ID but has no full name, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
         /// Types registered before the exception remain in the registry.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
@@ -89,8 +92,26 @@ namespace Moquestra.TypeIds
                 if (attribute is null)
                     continue;
 
-                Add(type, attribute.Id);
+                Add(type, attribute.Id == 0 ? ComputeId(type) : attribute.Id);
             }
+        }
+
+        /// <summary>
+        /// Computes a deterministic ID from the type's full name.
+        /// The sign bit is always set so the result is negative and never 0, separating computed IDs
+        /// from manual IDs, which are positive by convention.
+        /// string.GetHashCode() is not used because its result can vary per process.
+        /// </summary>
+        internal static int ComputeId(Type type)
+        {
+            var name = type.FullName;
+
+            if (name is null)
+                throw new ArgumentException($"Type '{type}' has no full name, so an ID cannot be computed.", nameof(type));
+
+            var hash = Fnv1a.Compute(MemoryMarshal.AsBytes(name.AsSpan()));
+
+            return unchecked((int)(hash | 0x80000000));
         }
 
         /// <summary>

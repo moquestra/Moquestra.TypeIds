@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Xunit;
 
@@ -234,6 +235,68 @@ namespace Moquestra.TypeIds.Tests
             Assert.Throws<ArgumentException>(() => registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly));
         }
 
+        [Fact]
+        public void Add_WithParameterlessTypeIdAttribute_MapsComputedNegativeId()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(ComputedMessage));
+
+            Assert.True(registry.TryGetId(typeof(ComputedMessage), out var id));
+
+            Assert.True(id < 0);
+        }
+
+        [Fact]
+        public void Add_WithParameterlessTypeIdAttribute_MapsSameIdAcrossRegistries()
+        {
+            var first = new TypeIdRegistry();
+            var second = new TypeIdRegistry();
+
+            first.Add(typeof(ComputedMessage));
+            second.Add(typeof(ComputedMessage));
+
+            first.TryGetId(typeof(ComputedMessage), out var firstId);
+            second.TryGetId(typeof(ComputedMessage), out var secondId);
+
+            Assert.Equal(firstId, secondId);
+        }
+
+        [Fact]
+        public void Add_WithZeroTypeIdAttribute_MapsComputedNegativeId()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(ZeroIdMessage));
+
+            Assert.True(registry.TryGetId(typeof(ZeroIdMessage), out var id));
+
+            Assert.True(id < 0);
+        }
+
+        [Fact]
+        public void ComputeId_WithType_ReturnsNegativeId()
+        {
+            Assert.True(TypeIdRegistry.ComputeId(typeof(string)) < 0);
+        }
+
+        [Fact]
+        public void ComputeId_WithSameType_ReturnsSameId()
+        {
+            var first = TypeIdRegistry.ComputeId(typeof(string));
+            var second = TypeIdRegistry.ComputeId(typeof(string));
+
+            Assert.Equal(first, second);
+        }
+
+        [Fact]
+        public void ComputeId_WithTypeWithoutFullName_ThrowsArgumentException()
+        {
+            var genericParameter = typeof(List<>).GetGenericArguments()[0];
+
+            Assert.Throws<ArgumentException>(() => TypeIdRegistry.ComputeId(genericParameter));
+        }
+
         [TypeId(10)]
         private sealed class AnnotatedMessage { }
 
@@ -241,5 +304,11 @@ namespace Moquestra.TypeIds.Tests
         private interface IAnnotatedMessage { }
 
         private sealed class UnannotatedMessage { }
+
+        [TypeId]
+        private sealed class ComputedMessage { }
+
+        [TypeId(0)]
+        private sealed class ZeroIdMessage { }
     }
 }

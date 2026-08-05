@@ -15,6 +15,14 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Constructor_WithoutId_ExposesZeroId()
+        {
+            var attribute = new TypeIdAttribute();
+
+            Assert.Equal(0, attribute.Id);
+        }
+
+        [Fact]
         public void AttributeUsage_WhenInspected_AllowsClassesStructsAndInterfaces()
         {
             var usage = (AttributeUsageAttribute?)Attribute.GetCustomAttribute(
