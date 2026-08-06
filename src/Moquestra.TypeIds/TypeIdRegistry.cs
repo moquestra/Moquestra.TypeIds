@@ -54,6 +54,29 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
+        /// Registers a type with an ID computed from the alias.
+        /// The alias is hashed instead of the type's full name, so changes to the type's full name do not change the ID.
+        /// Using the type's previous full name as the alias preserves the previous computed ID, maintaining compatibility with persisted data.
+        /// </summary>
+        /// <param name="type">The type to register. Cannot be null.</param>
+        /// <param name="alias">The alias used to compute the ID. Cannot be null or empty.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> or <paramref name="alias"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="alias"/> is empty, the type is already mapped to an ID, or the computed ID is already mapped to another type.</exception>
+        public void Add(Type type, string alias)
+        {
+            if (type is null)
+                throw new ArgumentNullException(nameof(type));
+
+            if (alias is null)
+                throw new ArgumentNullException(nameof(alias));
+
+            if (alias.Length == 0)
+                throw new ArgumentException("Alias cannot be empty.", nameof(alias));
+
+            Add(type, ComputeId(alias));
+        }
+
+        /// <summary>
         /// Registers a type using the ID specified by its <see cref="TypeIdAttribute"/>.
         /// </summary>
         /// <param name="type">The type to register. Cannot be null and must have a <see cref="TypeIdAttribute"/>.</param>
@@ -109,6 +132,11 @@ namespace Moquestra.TypeIds
             if (name is null)
                 throw new ArgumentException($"Type '{type}' has no full name, so an ID cannot be computed.", nameof(type));
 
+            return ComputeId(name);
+        }
+
+        internal static int ComputeId(string name)
+        {
             var hash = Fnv1a.Compute(MemoryMarshal.AsBytes(name.AsSpan()));
 
             return unchecked((int)(hash | 0x80000000));

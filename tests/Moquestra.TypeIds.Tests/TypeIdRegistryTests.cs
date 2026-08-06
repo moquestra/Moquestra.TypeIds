@@ -297,6 +297,64 @@ namespace Moquestra.TypeIds.Tests
             Assert.Throws<ArgumentException>(() => TypeIdRegistry.ComputeId(genericParameter));
         }
 
+        [Fact]
+        public void ComputeId_WithTypeAndItsFullName_ReturnsSameId()
+        {
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(string)), TypeIdRegistry.ComputeId(typeof(string).FullName!));
+        }
+
+        [Fact]
+        public void Add_WithAlias_MapsIdComputedFromAlias()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(string), "Alias");
+
+            Assert.True(registry.TryGetId(typeof(string), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId("Alias"), id);
+        }
+
+        [Fact]
+        public void Add_WithAlias_ResolvesTypeByIdComputedFromAlias()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(string), "Alias");
+
+            Assert.True(registry.TryGetType(TypeIdRegistry.ComputeId("Alias"), out var type));
+
+            Assert.Equal(typeof(string), type);
+        }
+
+        [Fact]
+        public void Add_WithNullAlias_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.Add(typeof(string), null!));
+        }
+
+        [Fact]
+        public void Add_WithEmptyAlias_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(string), string.Empty));
+        }
+
+        [Fact]
+        public void Add_WithSameAliasForAnotherType_ThrowsWithExistingTypeInMessage()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(string), "Alias");
+
+            var e = Assert.Throws<ArgumentException>(() => registry.Add(typeof(int), "Alias"));
+
+            Assert.Contains("'System.String'", e.Message);
+        }
+
         [TypeId(10)]
         private sealed class AnnotatedMessage { }
 
