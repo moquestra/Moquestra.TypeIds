@@ -16,6 +16,7 @@ Use it when you need a small, stable identifier for a .NET type:
 [TypeId(1)] sealed class LoginRequest { }
 [TypeId(2)] sealed class LoginResponse { }
 [TypeId]    sealed class HeartbeatCommand { }
+[TypeId("Session.Kick")] sealed class KickNotification { }
 
 var registry = new TypeIdRegistry();
 
@@ -26,17 +27,23 @@ registry.AddFromAssembly(typeof(LoginRequest).Assembly);
 // registry.Add(typeof(LoginRequest));
 // registry.Add(typeof(LoginResponse));
 // registry.Add(typeof(HeartbeatCommand));
+// registry.Add(typeof(KickNotification));
 
 // Or register types with explicit IDs:
 // registry.Add(typeof(LoginRequest), 1);
 // registry.Add(typeof(LoginResponse), 2);
 
+// Or register types with aliases:
+// registry.Add(typeof(KickNotification), "Session.Kick");
+
 registry.TryGetId(typeof(LoginRequest), out var id);
 registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
+registry.TryGetId(typeof(KickNotification), out var kickId);
 registry.TryGetType(2, out var type);
 
 Console.WriteLine($"typeof(LoginRequest) -> {id}");
 Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
+Console.WriteLine($"typeof(KickNotification) -> {kickId}");
 Console.WriteLine($"2 -> {type}");
 ```
 
@@ -45,14 +52,16 @@ Output:
 ```
 typeof(LoginRequest) -> 1
 typeof(HeartbeatCommand) -> -810957197
+typeof(KickNotification) -> -1303333497
 2 -> Moquestra.TypeIds.Sample.LoginResponse
 ```
 
 - A type can be mapped to only one ID, and an ID to only one type.
-- `Add(Type)` reads the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
-- An omitted attribute ID is computed from the type's full name. Computed IDs are always negative, so they never collide with positive manual IDs.
-- A computed ID changes when the type is renamed or moved to another namespace. Before renaming or moving a type whose ID has been persisted, assign its current computed ID explicitly.
-- If two full names hash to the same ID, registration throws; assign an explicit ID to either type to resolve the collision.
+- `Add(Type)` determines the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
+- When the attribute specifies neither a nonzero ID nor an alias, the ID is computed from the type's full name. Computed IDs are always negative, so they never collide with positive manual IDs.
+- A string alias — `[TypeId("Session.Kick")]` or `Add(type, "Session.Kick")` — is hashed instead of the type's full name, so changing the type's name or namespace does not change the ID.
+- An ID computed from the type's full name changes when the type is renamed or moved to another namespace. To preserve compatibility with persisted data, use the type's previous full name as its alias; this preserves the previous computed ID.
+- If a full name or alias hashes to an ID already mapped to another type, registration throws; assign an explicit ID to either type to resolve the collision.
 - `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
 - If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
 - `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
