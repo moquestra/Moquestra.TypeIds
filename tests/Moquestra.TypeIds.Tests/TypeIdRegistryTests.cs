@@ -8,7 +8,7 @@ namespace Moquestra.TypeIds.Tests
     public class TypeIdRegistryTests
     {
         [Fact]
-        public void Add_WithDistinctPairs_Succeeds()
+        public void Add_WithDistinctMappings_Succeeds()
         {
             var registry = new TypeIdRegistry();
 
@@ -18,7 +18,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void Add_WithNullType_ThrowsArgumentNullException()
+        public void Add_WithNullTypeUsingExplicitIdOverload_ThrowsArgumentNullException()
         {
             var registry = new TypeIdRegistry();
 
@@ -98,7 +98,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void TryGetType_WithRegisteredId_ReturnsType()
+        public void TryGetType_WithMappedId_ReturnsType()
         {
             var registry = new TypeIdRegistry();
 
@@ -110,7 +110,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void TryGetType_WithUnregisteredId_ReturnsFalseAndNull()
+        public void TryGetType_WithUnmappedId_ReturnsFalseAndNull()
         {
             var registry = new TypeIdRegistry();
 
@@ -120,7 +120,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void TryGetId_WithRegisteredType_ReturnsId()
+        public void TryGetId_WithMappedType_ReturnsId()
         {
             var registry = new TypeIdRegistry();
 
@@ -132,7 +132,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void TryGetId_WithUnregisteredType_ReturnsFalseAndZero()
+        public void TryGetId_WithUnmappedType_ReturnsFalseAndZero()
         {
             var registry = new TypeIdRegistry();
 
@@ -184,7 +184,7 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void Add_WithNullTypeUsingAttributeOverload_ThrowsArgumentNullException()
+        public void Add_WithNullTypeUsingAttributeBasedOverload_ThrowsArgumentNullException()
         {
             var registry = new TypeIdRegistry();
 
@@ -325,6 +325,14 @@ namespace Moquestra.TypeIds.Tests
             Assert.True(registry.TryGetType(TypeIdRegistry.ComputeId("Alias"), out var type));
 
             Assert.Equal(typeof(string), type);
+        }
+
+        [Fact]
+        public void Add_WithNullTypeUsingAliasOverload_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.Add(null!, "Alias"));
         }
 
         [Fact]
