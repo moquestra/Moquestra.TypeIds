@@ -77,11 +77,12 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
-        /// Registers a type using the ID specified by its <see cref="TypeIdAttribute"/>.
+        /// Registers a type using its <see cref="TypeIdAttribute"/>.
+        /// If the attribute declares an alias, the ID is computed from the alias instead of the type's full name.
         /// </summary>
         /// <param name="type">The type to register. Cannot be null and must have a <see cref="TypeIdAttribute"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
-        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, a computed ID is required but the type has no full name, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, a computed ID is required but the type has no full name, the declared alias is empty, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
         public void Add(Type type)
         {
             if (type is null)
@@ -92,16 +93,17 @@ namespace Moquestra.TypeIds
             if (attribute is null)
                 throw new ArgumentException($"Type '{type}' does not have a TypeIdAttribute.", nameof(type));
 
-            Add(type, attribute.Id == 0 ? ComputeId(type) : attribute.Id);
+            Add(type, attribute);
         }
 
         /// <summary>
         /// Registers every type in the assembly that has a <see cref="TypeIdAttribute"/>.
         /// Types without the attribute are ignored.
+        /// If a scanned type declares an alias, the ID is computed from the alias instead of the type's full name.
         /// </summary>
         /// <param name="assembly">The assembly to scan. Cannot be null.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is null.</exception>
-        /// <exception cref="ArgumentException">A scanned type requires a computed ID but has no full name, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
+        /// <exception cref="ArgumentException">A scanned type requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
         /// Types registered before the exception remain in the registry.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
@@ -115,8 +117,16 @@ namespace Moquestra.TypeIds
                 if (attribute is null)
                     continue;
 
-                Add(type, attribute.Id == 0 ? ComputeId(type) : attribute.Id);
+                Add(type, attribute);
             }
+        }
+
+        private void Add(Type type, TypeIdAttribute attribute)
+        {
+            if (attribute.Alias is null)
+                Add(type, attribute.Id == 0 ? ComputeId(type) : attribute.Id);
+            else
+                Add(type, attribute.Alias);
         }
 
         /// <summary>

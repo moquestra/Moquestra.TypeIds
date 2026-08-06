@@ -23,6 +23,22 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Constructor_WithAlias_ExposesAliasAndZeroId()
+        {
+            var attribute = new TypeIdAttribute("Alias");
+
+            Assert.Equal("Alias", attribute.Alias);
+
+            Assert.Equal(0, attribute.Id);
+        }
+
+        [Fact]
+        public void Constructor_WithNullAlias_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => new TypeIdAttribute(null!));
+        }
+
+        [Fact]
         public void AttributeUsage_WhenInspected_AllowsClassesStructsAndInterfaces()
         {
             var usage = (AttributeUsageAttribute?)Attribute.GetCustomAttribute(

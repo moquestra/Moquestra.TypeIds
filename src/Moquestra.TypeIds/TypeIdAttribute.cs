@@ -3,8 +3,9 @@ using System;
 namespace Moquestra.TypeIds
 {
     /// <summary>
-    /// Specifies the integer ID to map to a type.
-    /// If the ID is omitted, it is computed from the type's full name at registration.
+    /// Specifies how the integer ID for a type is determined at registration.
+    /// A nonzero ID is used directly, while an alias is used to compute the ID.
+    /// If neither is specified, the ID is computed from the type's full name.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
     public sealed class TypeIdAttribute : Attribute
@@ -27,8 +28,28 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="TypeIdAttribute"/> class with the specified alias.
+        /// The ID is computed from the alias instead of the type's full name at registration.
+        /// </summary>
+        /// <param name="alias">The alias used to compute the ID. Cannot be null or empty.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="alias"/> is null.</exception>
+        public TypeIdAttribute(string alias)
+        {
+            if (alias is null)
+                throw new ArgumentNullException(nameof(alias));
+
+            Alias = alias;
+        }
+
+        /// <summary>
         /// Gets the integer ID to map to the type. 0 means the ID is computed at registration.
         /// </summary>
         public int Id { get; }
+
+        /// <summary>
+        /// Gets the alias used to compute the ID. null means no alias is specified,
+        /// and the ID is determined by <see cref="Id"/> or the type's full name.
+        /// </summary>
+        public string? Alias { get; }
     }
 }

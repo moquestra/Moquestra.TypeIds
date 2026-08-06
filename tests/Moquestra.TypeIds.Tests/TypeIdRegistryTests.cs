@@ -355,6 +355,42 @@ namespace Moquestra.TypeIds.Tests
             Assert.Contains("'System.String'", e.Message);
         }
 
+        [Fact]
+        public void Add_WithAliasInTypeIdAttribute_MapsIdComputedFromAlias()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(AliasedMessage));
+
+            Assert.True(registry.TryGetId(typeof(AliasedMessage), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId("Aliased.Message"), id);
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithTestAssembly_MapsIdComputedFromAlias()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly);
+
+            Assert.True(registry.TryGetId(typeof(AliasedMessage), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId("Aliased.Message"), id);
+        }
+
+        [Fact]
+        public void Add_WithPreviousFullNameAsAttributeAlias_PreservesIdAcrossRename()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(RenamedMessage));
+
+            Assert.True(registry.TryGetId(typeof(RenamedMessage), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(LegacyMessage)), id);
+        }
+
         [TypeId(10)]
         private sealed class AnnotatedMessage { }
 
@@ -368,5 +404,13 @@ namespace Moquestra.TypeIds.Tests
 
         [TypeId(0)]
         private sealed class ZeroIdMessage { }
+
+        [TypeId("Aliased.Message")]
+        private sealed class AliasedMessage { }
+
+        private sealed class LegacyMessage { }
+
+        [TypeId("Moquestra.TypeIds.Tests.TypeIdRegistryTests+LegacyMessage")]
+        private sealed class RenamedMessage { }
     }
 }

@@ -12,8 +12,9 @@ namespace Moquestra.TypeIds.Sample
     // When omitted, the ID is computed from the type's full name and is always negative:
     [TypeId] internal sealed class HeartbeatCommand { }
 
-    // This type is registered with an alias in Main instead of using TypeIdAttribute:
-    internal sealed class KickNotification { }
+    // The alias is hashed instead of the type's full name, so changing the type's
+    // name or namespace does not change the ID computed from the protocol name "Session.Kick":
+    [TypeId("Session.Kick")] internal sealed class KickNotification { }
 
     internal static class Program
     {
@@ -31,6 +32,7 @@ namespace Moquestra.TypeIds.Sample
             // registry.Add(typeof(LogoutResponse));
             // registry.Add(typeof(TimeSyncCommand));
             // registry.Add(typeof(HeartbeatCommand));
+            // registry.Add(typeof(KickNotification));
 
             // Or register types with explicit IDs:
             // registry.Add(typeof(LoginRequest), 1);
@@ -39,9 +41,8 @@ namespace Moquestra.TypeIds.Sample
             // registry.Add(typeof(LogoutResponse), 4);
             // registry.Add(typeof(TimeSyncCommand), 5);
 
-            // The alias is hashed instead of the type's full name, so changing the type's
-            // name or namespace does not change the ID computed from the protocol name "Session.Kick":
-            registry.Add(typeof(KickNotification), "Session.Kick");
+            // Or register types with aliases:
+            // registry.Add(typeof(KickNotification), "Session.Kick");
 
             registry.TryGetId(typeof(LoginRequest), out var id);
             registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
