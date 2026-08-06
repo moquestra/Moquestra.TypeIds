@@ -31,8 +31,8 @@ namespace Moquestra.TypeIds
         /// Initializes a new instance of the <see cref="TypeIdAttribute"/> class with the specified alias.
         /// The ID is computed from the alias instead of the type's full name at registration.
         /// </summary>
-        /// <param name="alias">The alias used to compute the ID. Cannot be null or empty.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="alias"/> is null.</exception>
+        /// <param name="alias">The alias used to compute the ID. Cannot be <see langword="null"/> or empty.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="alias"/> is <see langword="null"/>.</exception>
         public TypeIdAttribute(string alias)
         {
             if (alias is null)
@@ -47,7 +47,7 @@ namespace Moquestra.TypeIds
         public int Id { get; }
 
         /// <summary>
-        /// Gets the alias used to compute the ID. null means no alias is specified,
+        /// Gets the alias used to compute the ID. <see langword="null"/> means no alias is specified,
         /// and the ID is determined by <see cref="Id"/> or the type's full name.
         /// </summary>
         public string? Alias { get; }
