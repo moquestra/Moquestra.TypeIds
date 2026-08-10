@@ -57,6 +57,7 @@ typeof(KickNotification) -> -2036228135
 ```
 
 - A type can be mapped to only one ID, and an ID to only one type.
+- Generic types are not supported. Registering one throws an `ArgumentException`.
 - `Add(Type)` determines the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
 - When the attribute specifies neither a nonzero ID nor an alias, the ID is computed from the type's full name. Computed IDs are always negative, so they never collide with positive manual IDs.
 - A string alias — `[TypeId("Session.Kick")]` or `Add(type, "Session.Kick")` — is hashed instead of the type's full name, so changing the type's name or namespace does not change the ID.
@@ -96,3 +97,4 @@ The generator reports these diagnostics:
 | MQTID002 | Error | The annotated type declares a null or empty alias. |
 | MQTID003 | Error | An ID is mapped to more than one type. |
 | MQTID004 | Error | The generated lookup type conflicts with an existing type in the assembly. |
+| MQTID005 | Error | The annotated type is a generic type, which is not supported. |

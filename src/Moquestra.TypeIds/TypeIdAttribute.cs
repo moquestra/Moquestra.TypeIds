@@ -6,6 +6,7 @@ namespace Moquestra.TypeIds
     /// Specifies how the integer ID for a type is determined at registration.
     /// A nonzero ID is used directly, while an alias is used to compute the ID.
     /// If neither is specified, the ID is computed from the type's full name.
+    /// Applying this attribute to a generic type is not supported.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
     public sealed class TypeIdAttribute : Attribute

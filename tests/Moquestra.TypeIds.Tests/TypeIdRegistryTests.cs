@@ -34,6 +34,22 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Add_WithGenericTypeDefinition_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(List<>), 10));
+        }
+
+        [Fact]
+        public void Add_WithConstructedGenericType_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(List<int>), 10));
+        }
+
+        [Fact]
         public void Add_WithDuplicateId_ThrowsWithExistingTypeInMessage()
         {
             var registry = new TypeIdRegistry();

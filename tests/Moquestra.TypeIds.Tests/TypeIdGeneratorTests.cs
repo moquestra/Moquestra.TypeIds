@@ -231,6 +231,51 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal(string.Empty, generated);
         }
 
+        [Fact]
+        public void Run_WithGenericType_ReportsUnsupportedGenericTypeError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Envelope<T> { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID005", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+
+            Assert.Contains("Envelope", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.True(diagnostic.Location.IsInSource);
+
+            Assert.DoesNotContain("Envelope", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithTypeNestedInGenericType_ReportsUnsupportedGenericTypeError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                public class Container<T>
+                {
+                    [TypeId(1)]
+                    public sealed class Message { }
+                }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID005", diagnostic.Id);
+
+            Assert.Contains("Container<T>.Message", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.DoesNotContain("Message", generated, StringComparison.Ordinal);
+        }
+
         private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource, Compilation Output) Run(string source)
         {
             var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp11);

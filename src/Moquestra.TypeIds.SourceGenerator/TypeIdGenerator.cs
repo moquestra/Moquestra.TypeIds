@@ -54,6 +54,14 @@ namespace Moquestra.TypeIds.SourceGenerator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor UnsupportedGenericType = new DiagnosticDescriptor(
+            "MQTID005",
+            "Generic types are not supported",
+            "Type '{0}' is a generic type, which is not supported",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         /// <inheritdoc/>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -116,6 +124,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 explicitId,
                 alias,
                 hasInvalidAlias,
+                IsGenericType(symbol),
                 IsAccessibleFromGeneratedCode(symbol),
                 symbol.Locations.Length > 0 ? symbol.Locations[0] : Location.None);
         }
@@ -171,6 +180,13 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             foreach (var candidate in candidates)
             {
+                if (candidate.IsGenericType)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(UnsupportedGenericType, candidate.Location, candidate.DisplayName));
+
+                    continue;
+                }
+
                 if (!candidate.IsAccessible)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(InaccessibleType, candidate.Location, candidate.DisplayName));
@@ -281,6 +297,23 @@ namespace Moquestra.TypeIds.SourceGenerator
             context.AddSource("TypeIdMap.g.cs", writer.GetContents().Replace("\r\n", "\n"));
         }
 
+        // Mirrors Type.IsGenericType: a type nested in a generic type is itself generic
+        // because it carries the containing type's type parameters.
+        private static bool IsGenericType(INamedTypeSymbol symbol)
+        {
+            var current = symbol;
+
+            while (current is not null)
+            {
+                if (current.Arity > 0)
+                    return true;
+
+                current = current.ContainingType;
+            }
+
+            return false;
+        }
+
         // The generated code references types with typeof from a separate class,
         // so the type and all of its containing types must be at least internal.
         private static bool IsAccessibleFromGeneratedCode(INamedTypeSymbol symbol)
@@ -357,6 +390,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 int? explicitId,
                 string? alias,
                 bool hasInvalidAlias,
+                bool isGenericType,
                 bool isAccessible,
                 Location location)
             {
@@ -366,6 +400,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 ExplicitId = explicitId;
                 Alias = alias;
                 HasInvalidAlias = hasInvalidAlias;
+                IsGenericType = isGenericType;
                 IsAccessible = isAccessible;
                 Location = location;
             }
@@ -381,6 +416,8 @@ namespace Moquestra.TypeIds.SourceGenerator
             public string? Alias { get; }
 
             public bool HasInvalidAlias { get; }
+
+            public bool IsGenericType { get; }
 
             public bool IsAccessible { get; }
 

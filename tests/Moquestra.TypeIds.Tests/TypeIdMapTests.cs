@@ -8,9 +8,6 @@ using Moquestra.TypeIds.Generated;
 
 namespace Moquestra.TypeIds.Tests
 {
-    [TypeId]
-    internal sealed class GenericComputedMessage<T> { }
-
     public class TypeIdMapTests
     {
         private static readonly Type[] MappedTypes =
@@ -21,7 +18,6 @@ namespace Moquestra.TypeIds.Tests
             typeof(TypeIdRegistryTests.ZeroIdMessage),
             typeof(TypeIdRegistryTests.AliasedMessage),
             typeof(TypeIdRegistryTests.RenamedMessage),
-            typeof(GenericComputedMessage<>),
         };
 
         [Fact]
@@ -38,14 +34,6 @@ namespace Moquestra.TypeIds.Tests
             Assert.True(TypeIdMap.TryGetId(typeof(TypeIdRegistryTests.ComputedMessage), out var id));
 
             Assert.Equal(TypeIdRegistry.ComputeId(typeof(TypeIdRegistryTests.ComputedMessage)), id);
-        }
-
-        [Fact]
-        public void TryGetId_WithGenericType_MatchesRuntimeComputation()
-        {
-            Assert.True(TypeIdMap.TryGetId(typeof(GenericComputedMessage<>), out var id));
-
-            Assert.Equal(TypeIdRegistry.ComputeId(typeof(GenericComputedMessage<>)), id);
         }
 
         [Fact]

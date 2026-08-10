@@ -27,14 +27,17 @@ namespace Moquestra.TypeIds
         /// A type can be mapped to only one ID, and an ID to only one type.
         /// Validation failures leave the registry state unchanged.
         /// </summary>
-        /// <param name="type">The type to register. Cannot be <see langword="null"/>.</param>
+        /// <param name="type">The type to register. Cannot be <see langword="null"/> or a generic type.</param>
         /// <param name="id">The integer ID to map to the type. Cannot be 0.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="id"/> is 0, the type is already mapped to an ID, or the ID is already mapped to a type.</exception>
+        /// <exception cref="ArgumentException">The type is a generic type, <paramref name="id"/> is 0, the type is already mapped to an ID, or the ID is already mapped to a type.</exception>
         public void Add(Type type, int id)
         {
             if (type is null)
                 throw new ArgumentNullException(nameof(type));
+
+            if (type.IsGenericType)
+                throw new ArgumentException($"Type '{type}' is a generic type, which is not supported.", nameof(type));
 
             // 0 is reserved because TryGetId returns 0 when no mapping exists.
             if (id == 0)
@@ -55,10 +58,10 @@ namespace Moquestra.TypeIds
         /// The alias is hashed instead of the type's full name, so changes to the type's full name do not change the ID.
         /// Using the type's previous full name as the alias preserves the previous computed ID, maintaining compatibility with persisted data.
         /// </summary>
-        /// <param name="type">The type to register. Cannot be <see langword="null"/>.</param>
+        /// <param name="type">The type to register. Cannot be <see langword="null"/> or a generic type.</param>
         /// <param name="alias">The alias used to compute the ID. Cannot be <see langword="null"/> or empty.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> or <paramref name="alias"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="alias"/> is empty, the type is already mapped to an ID, or the computed ID is already mapped to another type.</exception>
+        /// <exception cref="ArgumentException"><paramref name="alias"/> is empty, the type is a generic type, the type is already mapped to an ID, or the computed ID is already mapped to another type.</exception>
         public void Add(Type type, string alias)
         {
             if (type is null)
@@ -77,9 +80,9 @@ namespace Moquestra.TypeIds
         /// Registers a type using its <see cref="TypeIdAttribute"/>.
         /// If the attribute declares an alias, the ID is computed from the alias instead of the type's full name.
         /// </summary>
-        /// <param name="type">The type to register. Cannot be <see langword="null"/> and must have a <see cref="TypeIdAttribute"/>.</param>
+        /// <param name="type">The type to register. Cannot be <see langword="null"/> or a generic type, and must have a <see cref="TypeIdAttribute"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, a computed ID is required but the type has no full name, the declared alias is empty, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the type is a generic type, a computed ID is required but the type has no full name, the declared alias is empty, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
         public void Add(Type type)
         {
             if (type is null)
@@ -100,7 +103,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="assembly">The assembly to scan. Cannot be <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException">A scanned type requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
+        /// <exception cref="ArgumentException">A scanned type is a generic type, requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
         /// Types registered before the exception remain in the registry.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
