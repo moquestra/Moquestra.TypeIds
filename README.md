@@ -65,3 +65,34 @@ typeof(KickNotification) -> -2036228135
 - `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
 - If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
 - `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
+
+## Source generator
+
+The `Moquestra.TypeIds.SourceGenerator` project provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `Moquestra.TypeIds.Generated.TypeIdMap` class. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+
+Reference the generator project as an analyzer, adjusting the path to its location:
+
+```xml
+<ProjectReference Include="..\Moquestra.TypeIds.SourceGenerator\Moquestra.TypeIds.SourceGenerator.csproj"
+                  OutputItemType="Analyzer"
+                  ReferenceOutputAssembly="false" />
+```
+
+The generated lookup methods mirror the registry's lookup API:
+
+```csharp
+Moquestra.TypeIds.Generated.TypeIdMap.TryGetType(2, out var mappedType);
+Moquestra.TypeIds.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
+```
+
+- IDs are determined at compile time using the same rules as the runtime registry, so generated and runtime mappings use the same ID for every type handled by both paths.
+- The registry remains available for cases the generator cannot cover, such as assemblies loaded at runtime.
+
+The generator reports these diagnostics:
+
+| ID | Severity | Description |
+|---|---|---|
+| MQTID001 | Warning | The annotated type is not accessible to the generated lookup and is skipped. |
+| MQTID002 | Error | The annotated type declares a null or empty alias. |
+| MQTID003 | Error | An ID is mapped to more than one type. |
+| MQTID004 | Error | The generated lookup type conflicts with an existing type in the assembly. |
