@@ -300,7 +300,7 @@ namespace Moquestra.TypeIds.Tests
         [Fact]
         public void ComputeId_WithTypeAndItsFullName_ReturnsSameId()
         {
-            Assert.Equal(TypeIdRegistry.ComputeId(typeof(string)), TypeIdRegistry.ComputeId(typeof(string).FullName!));
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(string)), TypeIdHelpers.ComputeId(typeof(string).FullName!));
         }
 
         [Fact]
@@ -312,7 +312,7 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.True(registry.TryGetId(typeof(string), out var id));
 
-            Assert.Equal(TypeIdRegistry.ComputeId("Alias"), id);
+            Assert.Equal(TypeIdHelpers.ComputeId("Alias"), id);
         }
 
         [Fact]
@@ -322,7 +322,7 @@ namespace Moquestra.TypeIds.Tests
 
             registry.Add(typeof(string), "Alias");
 
-            Assert.True(registry.TryGetType(TypeIdRegistry.ComputeId("Alias"), out var type));
+            Assert.True(registry.TryGetType(TypeIdHelpers.ComputeId("Alias"), out var type));
 
             Assert.Equal(typeof(string), type);
         }
@@ -372,7 +372,7 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.True(registry.TryGetId(typeof(AliasedMessage), out var id));
 
-            Assert.Equal(TypeIdRegistry.ComputeId("Aliased.Message"), id);
+            Assert.Equal(TypeIdHelpers.ComputeId("Aliased.Message"), id);
         }
 
         [Fact]
@@ -384,7 +384,7 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.True(registry.TryGetId(typeof(AliasedMessage), out var id));
 
-            Assert.Equal(TypeIdRegistry.ComputeId("Aliased.Message"), id);
+            Assert.Equal(TypeIdHelpers.ComputeId("Aliased.Message"), id);
         }
 
         [Fact]

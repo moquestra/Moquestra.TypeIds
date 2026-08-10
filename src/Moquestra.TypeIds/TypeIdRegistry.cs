@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using System.Runtime.InteropServices;
-
-using Moquestra.TypeIds.Hashing;
 
 namespace Moquestra.TypeIds
 {
@@ -73,7 +70,7 @@ namespace Moquestra.TypeIds
             if (alias.Length == 0)
                 throw new ArgumentException("Alias cannot be empty.", nameof(alias));
 
-            Add(type, ComputeId(alias));
+            Add(type, TypeIdHelpers.ComputeId(alias));
         }
 
         /// <summary>
@@ -142,14 +139,7 @@ namespace Moquestra.TypeIds
             if (name is null)
                 throw new ArgumentException($"Type '{type}' has no full name, so an ID cannot be computed.", nameof(type));
 
-            return ComputeId(name);
-        }
-
-        internal static int ComputeId(string name)
-        {
-            var hash = Fnv1a.Compute(MemoryMarshal.AsBytes(name.AsSpan()));
-
-            return unchecked((int)(hash | 0x80000000));
+            return TypeIdHelpers.ComputeId(name);
         }
 
         /// <summary>
