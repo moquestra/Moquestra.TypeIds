@@ -400,25 +400,25 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [TypeId(10)]
-        private sealed class AnnotatedMessage { }
+        internal sealed class AnnotatedMessage { }
 
         [TypeId(11)]
-        private interface IAnnotatedMessage { }
+        internal interface IAnnotatedMessage { }
 
         private sealed class UnannotatedMessage { }
 
         [TypeId]
-        private sealed class ComputedMessage { }
+        internal sealed class ComputedMessage { }
 
         [TypeId(0)]
-        private sealed class ZeroIdMessage { }
+        internal sealed class ZeroIdMessage { }
 
         [TypeId("Aliased.Message")]
-        private sealed class AliasedMessage { }
+        internal sealed class AliasedMessage { }
 
-        private sealed class LegacyMessage { }
+        internal sealed class LegacyMessage { }
 
         [TypeId("Moquestra.TypeIds.Tests.TypeIdRegistryTests+LegacyMessage")]
-        private sealed class RenamedMessage { }
+        internal sealed class RenamedMessage { }
     }
 }

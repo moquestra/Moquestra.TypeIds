@@ -44,6 +44,11 @@ namespace Moquestra.TypeIds.Sample
             // Or register types with aliases:
             // registry.Add(typeof(KickNotification), "Session.Kick");
 
+            // Or use the source-generated lookup class, which performs lookups using
+            // generated switch statements without a registry or dictionary:
+            // Moquestra.TypeIds.Generated.TypeIdMap.TryGetType(2, out var mappedType);
+            // Moquestra.TypeIds.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
+
             registry.TryGetId(typeof(LoginRequest), out var id);
             registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
             registry.TryGetId(typeof(KickNotification), out var kickId);

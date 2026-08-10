@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Moquestra.TypeIds/Moquestra.TypeIds.csproj" />
+    <Project Path="src/Moquestra.TypeIds.SourceGenerator/Moquestra.TypeIds.SourceGenerator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Moquestra.TypeIds.Tests/Moquestra.TypeIds.Tests.csproj" />
