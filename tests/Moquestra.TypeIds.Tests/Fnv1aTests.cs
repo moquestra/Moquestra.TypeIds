@@ -1,9 +1,9 @@
 using System;
 using System.Text;
 
-using Moquestra.TypeIds.Hashing;
-
 using Xunit;
+
+using Moquestra.TypeIds.Hashing;
 
 namespace Moquestra.TypeIds.Tests
 {
