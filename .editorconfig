@@ -14,7 +14,7 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 
 ################################
-# Scripts files                #
+# Script files                 #
 ################################
 [*.{sh,bash}]
 end_of_line = lf
@@ -195,6 +195,10 @@ dotnet_naming_symbols.local_symbols.applicable_accessibilities = local
 dotnet_naming_symbols.private_fields_symbols.applicable_kinds = field
 dotnet_naming_symbols.private_fields_symbols.applicable_accessibilities = private,private_protected
 
+dotnet_naming_symbols.private_static_readonly_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields_symbols.applicable_accessibilities = private,private_protected
+dotnet_naming_symbols.private_static_readonly_fields_symbols.required_modifiers = static,readonly
+
 dotnet_naming_symbols.const_symbols.applicable_kinds = *
 dotnet_naming_symbols.const_symbols.applicable_accessibilities = *
 dotnet_naming_symbols.const_symbols.required_modifiers = const
@@ -231,6 +235,10 @@ dotnet_naming_rule.const_rule.severity = warning
 dotnet_naming_rule.async_rule.symbols = async_symbols
 dotnet_naming_rule.async_rule.style = async_method_style
 dotnet_naming_rule.async_rule.severity = warning
+
+dotnet_naming_rule.private_static_readonly_fields_rule.symbols = private_static_readonly_fields_symbols
+dotnet_naming_rule.private_static_readonly_fields_rule.style = pascal_case_style
+dotnet_naming_rule.private_static_readonly_fields_rule.severity = warning
 
 dotnet_naming_rule.private_fields_rule.symbols = private_fields_symbols
 dotnet_naming_rule.private_fields_rule.style = camel_case_with_underscore_style
