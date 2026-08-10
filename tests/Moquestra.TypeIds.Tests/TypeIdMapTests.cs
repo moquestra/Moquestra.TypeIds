@@ -4,7 +4,7 @@ using System.Reflection.Emit;
 
 using Xunit;
 
-using Moquestra.TypeIds.Generated;
+using Moquestra.TypeIds.Tests.Generated;
 
 namespace Moquestra.TypeIds.Tests
 {

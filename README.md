@@ -69,7 +69,7 @@ typeof(KickNotification) -> -2036228135
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` project provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `Moquestra.TypeIds.Generated.TypeIdMap` class. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` project provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
 
 Reference the generator project as an analyzer, adjusting the path to its location:
 
@@ -82,11 +82,12 @@ Reference the generator project as an analyzer, adjusting the path to its locati
 The generated lookup methods mirror the registry's lookup API:
 
 ```csharp
-Moquestra.TypeIds.Generated.TypeIdMap.TryGetType(2, out var mappedType);
-Moquestra.TypeIds.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
+Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetType(2, out var mappedType);
+Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
 ```
 
 - IDs are determined at compile time using the same rules as the runtime registry, so generated and runtime mappings use the same ID for every type handled by both paths.
+- Assemblies with distinct root namespaces get distinct lookup names, so their maps can be referenced side by side.
 - The registry remains available for cases the generator cannot cover, such as assemblies loaded at runtime.
 
 The generator reports these diagnostics:

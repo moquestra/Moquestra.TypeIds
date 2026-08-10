@@ -19,7 +19,7 @@ namespace Moquestra.TypeIds.SourceGenerator
     public sealed class TypeIdGenerator : IIncrementalGenerator
     {
         private const string AttributeMetadataName = "Moquestra.TypeIds.TypeIdAttribute";
-        private const string GeneratedMapNamespace = "Moquestra.TypeIds.Generated";
+        private const string GeneratedNamespaceSuffix = ".Generated";
         private const string GeneratedMapName = "TypeIdMap";
 
         private static readonly DiagnosticDescriptor InaccessibleType = new DiagnosticDescriptor(
@@ -76,13 +76,21 @@ namespace Moquestra.TypeIds.SourceGenerator
                 .CreateSyntaxProvider(
                     static (node, _) => IsPotentialConflict(node),
                     static (syntaxContext, _) => CaptureConflict(syntaxContext))
-                .Where(static location => location is not null)
-                .Select(static (location, _) => location!)
+                .Where(static conflict => conflict is not null)
+                .Select(static (conflict, _) => conflict!.Value)
                 .Collect();
 
+            // Only the assembly name is selected out of the compilation so that the
+            // provider stays cacheable across edits.
+            var mapNamespace = context.AnalyzerConfigOptionsProvider
+                .Select(static (provider, _) =>
+                    provider.GlobalOptions.TryGetValue("build_property.RootNamespace", out var value) ? value : null)
+                .Combine(context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName))
+                .Select(static (names, _) => BuildGeneratedNamespace(names.Left, names.Right));
+
             context.RegisterSourceOutput(
-                candidates.Combine(conflicts),
-                static (productionContext, input) => Emit(productionContext, input.Left, input.Right));
+                candidates.Combine(conflicts).Combine(mapNamespace),
+                static (productionContext, input) => Emit(productionContext, input.Left.Left, input.Left.Right, input.Right));
         }
 
         private static TypeIdCandidate Capture(GeneratorAttributeSyntaxContext context)
@@ -139,16 +147,20 @@ namespace Moquestra.TypeIds.SourceGenerator
             };
         }
 
-        private static Location? CaptureConflict(GeneratorSyntaxContext context)
+        // The generated namespace is not known at capture time, so the containing
+        // namespace is recorded here and compared against it during emit.
+        private static (string Namespace, Location Location)? CaptureConflict(GeneratorSyntaxContext context)
         {
             var symbol = context.SemanticModel.GetDeclaredSymbol(context.Node) as INamedTypeSymbol;
 
-            return symbol is not null &&
-                symbol.MetadataName == GeneratedMapName &&
-                symbol.ContainingType is null &&
-                symbol.ContainingNamespace.ToDisplayString() == GeneratedMapNamespace
-                ? GetIdentifierLocation(context.Node)
-                : null;
+            if (symbol is null || symbol.MetadataName != GeneratedMapName || symbol.ContainingType is not null)
+                return null;
+
+            var containingNamespace = symbol.ContainingNamespace;
+
+            return (
+                containingNamespace.IsGlobalNamespace ? string.Empty : containingNamespace.ToDisplayString(),
+                GetIdentifierLocation(context.Node));
         }
 
         private static Location GetIdentifierLocation(SyntaxNode node)
@@ -161,20 +173,40 @@ namespace Moquestra.TypeIds.SourceGenerator
             };
         }
 
-        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<Location> conflicts)
+        // The lookup namespace is derived from the consuming project's root namespace,
+        // falling back to its assembly name. Assemblies with distinct derived namespaces
+        // can each expose a public map without colliding. The name is used as-is: an
+        // invalid root namespace or assembly name fails the build in the generated file
+        // instead of being sanitized here.
+        private static string BuildGeneratedNamespace(string? rootNamespace, string? assemblyName)
         {
-            if (conflicts.Length > 0)
-            {
-                foreach (var conflict in conflicts)
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        GeneratedTypeConflict,
-                        conflict,
-                        GeneratedMapNamespace + "." + GeneratedMapName));
-                }
+            var prefix = string.IsNullOrEmpty(rootNamespace) ? assemblyName : rootNamespace;
 
-                return;
+            // A compilation without an assembly name falls back to the previous fixed namespace.
+            return string.IsNullOrEmpty(prefix)
+                ? "Moquestra.TypeIds" + GeneratedNamespaceSuffix
+                : prefix + GeneratedNamespaceSuffix;
+        }
+
+        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, Location Location)> conflicts, string mapNamespace)
+        {
+            var hasConflict = false;
+
+            foreach (var conflict in conflicts)
+            {
+                if (conflict.Namespace != mapNamespace)
+                    continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    GeneratedTypeConflict,
+                    conflict.Location,
+                    mapNamespace + "." + GeneratedMapName));
+
+                hasConflict = true;
             }
+
+            if (hasConflict)
+                return;
 
             var mappings = new List<TypeIdMappingModel>();
 
@@ -248,7 +280,7 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             #nullable enable
 
-            namespace Moquestra.TypeIds.Generated
+            namespace {{mapNamespace}}
             {
                 /// <summary>
                 /// Provides a source-generated bidirectional mapping between the

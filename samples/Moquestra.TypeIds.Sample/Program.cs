@@ -46,8 +46,8 @@ namespace Moquestra.TypeIds.Sample
 
             // Or use the source-generated lookup class, which performs lookups using
             // generated switch statements without a registry or dictionary:
-            // Moquestra.TypeIds.Generated.TypeIdMap.TryGetType(2, out var mappedType);
-            // Moquestra.TypeIds.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
+            // Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetType(2, out var mappedType);
+            // Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
 
             registry.TryGetId(typeof(LoginRequest), out var id);
             registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
