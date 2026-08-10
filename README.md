@@ -51,8 +51,8 @@ Output:
 
 ```
 typeof(LoginRequest) -> 1
-typeof(HeartbeatCommand) -> -810957197
-typeof(KickNotification) -> -1303333497
+typeof(HeartbeatCommand) -> -416631049
+typeof(KickNotification) -> -2036228135
 2 -> Moquestra.TypeIds.Sample.LoginResponse
 ```
 
