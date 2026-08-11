@@ -38,6 +38,35 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Run_WithoutAnnotatedTypes_GeneratesNothing()
+        {
+            var (diagnostics, generated, output) = Run("""
+                public sealed class Message { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Equal(string.Empty, generated);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithoutAnnotatedTypes_IgnoresUserDeclaredTypeIdMap()
+        {
+            var (diagnostics, generated, _) = Run("""
+                namespace GeneratorTestAssembly.Generated
+                {
+                    public static class TypeIdMap { }
+                }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
         public void Run_WithPrivateNestedType_ReportsInaccessibleTypeWarning()
         {
             var (diagnostics, generated, _) = Run("""

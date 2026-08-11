@@ -190,6 +190,12 @@ namespace Moquestra.TypeIds.SourceGenerator
 
         private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, Location Location)> conflicts, string mapNamespace)
         {
+            // Installing the generator alone must not change the assembly's public API.
+            // When no types are annotated, nothing is emitted, so a user-declared type with
+            // the map's name cannot conflict with generated code that does not exist.
+            if (candidates.IsEmpty)
+                return;
+
             var hasConflict = false;
 
             foreach (var conflict in conflicts)
