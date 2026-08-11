@@ -436,5 +436,8 @@ namespace Moquestra.TypeIds.Tests
 
         [TypeId("Moquestra.TypeIds.Tests.TypeIdRegistryTests+LegacyMessage")]
         internal sealed class RenamedMessage { }
+
+        [TypeId]
+        internal struct StructMessage { }
     }
 }

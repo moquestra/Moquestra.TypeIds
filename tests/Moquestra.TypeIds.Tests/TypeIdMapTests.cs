@@ -18,6 +18,7 @@ namespace Moquestra.TypeIds.Tests
             typeof(TypeIdRegistryTests.ZeroIdMessage),
             typeof(TypeIdRegistryTests.AliasedMessage),
             typeof(TypeIdRegistryTests.RenamedMessage),
+            typeof(TypeIdRegistryTests.StructMessage),
         };
 
         [Fact]
