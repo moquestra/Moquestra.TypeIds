@@ -5,6 +5,9 @@
     <LangVersion>11.0</LangVersion>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsRoslynComponent>true</IsRoslynComponent>
+    <PackageId>Moquestra.TypeIds.SourceGenerator</PackageId>
+    <Description>A Roslyn source generator that creates compile-time type ID lookups for Moquestra.TypeIds.</Description>
+    <PackageTags>typeid;type-id;source-generator;roslyn</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

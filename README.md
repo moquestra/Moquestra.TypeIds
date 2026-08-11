@@ -1,6 +1,6 @@
 # Moquestra.TypeIds
 
-A library for bidirectional mapping between .NET types and integer IDs.
+A library for bidirectional mapping between types and integer IDs.
 
 ## When to use it
 
