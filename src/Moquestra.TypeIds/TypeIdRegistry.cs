@@ -7,6 +7,7 @@ namespace Moquestra.TypeIds
 {
     /// <summary>
     /// Provides a bidirectional mapping between <see cref="Type"/> instances and integer IDs.
+    /// This type is not thread-safe: complete registration on a single thread before performing concurrent lookups.
     /// </summary>
     public sealed class TypeIdRegistry
     {

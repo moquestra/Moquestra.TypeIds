@@ -10,6 +10,23 @@ Use it when you need a small, stable identifier for a .NET type:
 - Save data: serialized type names can become invalid when types are renamed or moved; explicitly assigned IDs remain stable.
 - Handler dispatch: route an incoming ID to the appropriate handler without string comparisons or reflection.
 
+## Installation
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Moquestra.TypeIds" Version="1.0.0" />
+  <PackageReference Include="Moquestra.TypeIds.SourceGenerator" Version="1.0.0" PrivateAssets="all" />
+</ItemGroup>
+```
+
+The runtime library works on its own; the source generator is optional. Library authors should keep the direct `Moquestra.TypeIds` reference so the dependency reaches their own package, and mark only the generator with `PrivateAssets="all"`.
+
+### Supported environments
+
+- Runtime library: targets `netstandard2.1` and is compatible with .NET Core 3.0+ and .NET 5+, but not with .NET Framework.
+- Source generator: requires a Roslyn 4.3+ compiler host — .NET SDK 6.0.400+ or Visual Studio 2022 17.3+. IDE design-time support also requires a compatible Roslyn host; if generated code is missing only in the editor, update the IDE. If the build reports warning CS9057 and `TypeIdMap` is missing, the host compiler is too old. Generated code compiles under C# 8.0 or later.
+- Trimming and Native AOT: `AddFromAssembly` discovers types through reflection, so trimmed deployments can remove annotated types and silently skip them. Prefer the source generator there; its `typeof` references keep the mapped types rooted.
+
 ## Usage
 
 ```csharp
@@ -66,20 +83,19 @@ typeof(KickNotification) -> -2036228135
 - `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
 - If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
 - `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
+- `TypeIdRegistry` is not thread-safe. Finish registration on a single thread during startup, and read concurrently only while no further registrations occur.
+
+## ID computation
+
+A computed ID is the 32-bit FNV-1a hash of the UTF-8 bytes of the type's full name, or of the alias when one is declared, with the sign bit forced so the result is always negative. This algorithm is a compatibility contract for 1.x, so peers in other languages can reproduce the same IDs.
+
+Lookups always take a `Type` or an ID; an alias is consumed when the ID is computed at registration or generation time and plays no part in lookups.
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` project provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
 
-Reference the generator project as an analyzer, adjusting the path to its location:
-
-```xml
-<ProjectReference Include="..\Moquestra.TypeIds.SourceGenerator\Moquestra.TypeIds.SourceGenerator.csproj"
-                  OutputItemType="Analyzer"
-                  ReferenceOutputAssembly="false" />
-```
-
-The generated lookup methods mirror the registry's lookup API:
+Install the generator package alongside the runtime package as shown in Installation. The generated lookup methods mirror the registry's lookup API:
 
 ```csharp
 Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetType(2, out var mappedType);
