@@ -103,8 +103,9 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="assembly">The assembly to scan. Cannot be <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ReflectionTypeLoadException">The assembly contains types that cannot be loaded.</exception>
         /// <exception cref="ArgumentException">A scanned type is a generic type, requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
-        /// Types registered before the exception remain in the registry.</exception>
+        /// Types registered before the exception remain in the registry; the scan follows the assembly's type enumeration order, which is unspecified.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
             if (assembly is null)
