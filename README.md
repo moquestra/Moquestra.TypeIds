@@ -1,5 +1,8 @@
 # Moquestra.TypeIds
 
+[![Build and test](https://github.com/moquestra/Moquestra.TypeIds/actions/workflows/build-and-test.yml/badge.svg?branch=main)](https://github.com/moquestra/Moquestra.TypeIds/actions/workflows/build-and-test.yml)
+[![NuGet](https://img.shields.io/nuget/v/Moquestra.TypeIds)](https://www.nuget.org/packages/Moquestra.TypeIds/)
+
 A library for bidirectional mapping between types and integer IDs.
 
 ## When to use it
