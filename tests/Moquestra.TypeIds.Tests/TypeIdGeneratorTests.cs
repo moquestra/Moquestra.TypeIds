@@ -97,6 +97,7 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
 
             Assert.Contains("Container.Hidden", diagnostic.GetMessage(), StringComparison.Ordinal);
+            Assert.Contains("ExcludeFromGeneratedMap", diagnostic.GetMessage(), StringComparison.Ordinal);
 
             Assert.True(diagnostic.Location.IsInSource);
 
@@ -544,6 +545,146 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal("MQTID006", diagnostic.Id);
 
             Assert.Contains("namespace F_oo.Generated", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithExcludedType_OmitsItFromGeneratedMap()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class First { }
+
+                [TypeId(2, ExcludeFromGeneratedMap = true)]
+                public sealed class Second { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("typeof(global::First)", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("typeof(global::Second)", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithExcludedPrivateNestedType_ReportsNoDiagnostics()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                public class Container
+                {
+                    [TypeId(1, ExcludeFromGeneratedMap = true)]
+                    private sealed class Hidden { }
+                }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.DoesNotContain("Hidden", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithDuplicateIdOnExcludedType_ReportsDuplicateIdError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class First { }
+
+                [TypeId(1, ExcludeFromGeneratedMap = true)]
+                public sealed class Second { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID003", diagnostic.Id);
+
+            Assert.Contains("First", diagnostic.GetMessage(), StringComparison.Ordinal);
+            Assert.Contains("Second", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Contains("typeof(global::First)", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("typeof(global::Second)", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithDuplicateIdOnEarlierExcludedType_KeepsIncludedTypeInMap()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, ExcludeFromGeneratedMap = true)]
+                public sealed class AExcluded { }
+
+                [TypeId(1)]
+                public sealed class ZIncluded { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID003", diagnostic.Id);
+
+            Assert.Contains("typeof(global::ZIncluded)", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("AExcluded", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithInvalidAliasOnExcludedType_ReportsInvalidAliasError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId("", ExcludeFromGeneratedMap = true)]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID002", diagnostic.Id);
+
+            Assert.DoesNotContain("Message", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithExcludedGenericType_ReportsUnsupportedGenericTypeError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, ExcludeFromGeneratedMap = true)]
+                public sealed class Envelope<T> { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID005", diagnostic.Id);
+
+            Assert.DoesNotContain("Envelope", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithOnlyExcludedTypes_GeneratesMapWithoutCases()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, ExcludeFromGeneratedMap = true)]
+                public sealed class Message { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class TypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("case ", generated, StringComparison.Ordinal);
 
             Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
         }

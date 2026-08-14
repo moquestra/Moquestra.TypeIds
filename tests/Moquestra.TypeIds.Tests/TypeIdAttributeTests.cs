@@ -39,6 +39,25 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void ExcludeFromGeneratedMap_ByDefault_IsFalse()
+        {
+            var attribute = new TypeIdAttribute(1);
+
+            Assert.False(attribute.ExcludeFromGeneratedMap);
+        }
+
+        [Fact]
+        public void ExcludeFromGeneratedMap_WhenSet_ExposesTrue()
+        {
+            var attribute = new TypeIdAttribute(1)
+            {
+                ExcludeFromGeneratedMap = true,
+            };
+
+            Assert.True(attribute.ExcludeFromGeneratedMap);
+        }
+
+        [Fact]
         public void AttributeUsage_WhenInspected_AllowsClassesStructsAndInterfaces()
         {
             var usage = (AttributeUsageAttribute?)Attribute.GetCustomAttribute(

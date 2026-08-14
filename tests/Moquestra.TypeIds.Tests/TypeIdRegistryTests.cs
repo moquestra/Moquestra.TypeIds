@@ -439,5 +439,8 @@ namespace Moquestra.TypeIds.Tests
 
         [TypeId]
         internal struct StructMessage { }
+
+        [TypeId(ExcludeFromGeneratedMap = true)]
+        internal sealed class ExcludedMessage { }
     }
 }
