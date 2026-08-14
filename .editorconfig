@@ -35,15 +35,6 @@ trim_trailing_whitespace = false
 indent_size = 2
 
 ################################
-# Generated files              #
-################################
-[{*.g.cs,*.generated.cs,*.Designer.cs,**/Generated/**}]
-generated_code = true
-end_of_line = lf
-dotnet_style_namespace_match_folder = false
-csharp_using_directive_placement = inside_namespace:none
-
-################################
 # C# files                     #
 ################################
 [*.{cs,csx}]
@@ -255,3 +246,18 @@ dotnet_naming_rule.public_rule.severity = warning
 dotnet_naming_rule.local_function_rule.symbols = local_function_symbols
 dotnet_naming_rule.local_function_rule.style = pascal_case_style
 dotnet_naming_rule.local_function_rule.severity = warning
+
+################################
+# Generated files              #
+################################
+[*.{g,generated,Designer}.cs]
+generated_code = true
+end_of_line = lf
+dotnet_style_namespace_match_folder = false
+csharp_using_directive_placement = inside_namespace:none
+
+[**/Generated/**]
+generated_code = true
+end_of_line = lf
+dotnet_style_namespace_match_folder = false
+csharp_using_directive_placement = inside_namespace:none
