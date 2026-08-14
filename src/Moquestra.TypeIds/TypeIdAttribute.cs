@@ -3,17 +3,18 @@ using System;
 namespace Moquestra.TypeIds
 {
     /// <summary>
-    /// Specifies how the integer ID for a type is determined at registration.
+    /// Specifies how the integer ID for a type is determined during registration or source generation.
     /// A nonzero ID is used directly, while an alias is used to compute the ID.
     /// If neither is specified, the ID is computed from the type's full name.
-    /// Applying this attribute to a generic type is not supported.
+    /// <see cref="ExcludeFromGeneratedMap"/> controls whether the source generator includes
+    /// the type in its generated map. Applying this attribute to a generic type is not supported.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
     public sealed class TypeIdAttribute : Attribute
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="TypeIdAttribute"/> class without an explicit ID.
-        /// The ID is computed from the type's full name at registration.
+        /// The ID is computed from the type's full name during registration or source generation.
         /// </summary>
         public TypeIdAttribute()
         {
@@ -22,7 +23,7 @@ namespace Moquestra.TypeIds
         /// <summary>
         /// Initializes a new instance of the <see cref="TypeIdAttribute"/> class with the specified ID.
         /// </summary>
-        /// <param name="id">The integer ID to map to the type, or 0 to have the ID computed at registration.</param>
+        /// <param name="id">The integer ID to map to the type, or 0 to have the ID computed during registration or source generation.</param>
         public TypeIdAttribute(int id)
         {
             Id = id;
@@ -43,7 +44,8 @@ namespace Moquestra.TypeIds
         }
 
         /// <summary>
-        /// Gets the integer ID to map to the type. 0 means the ID is computed at registration.
+        /// Gets the integer ID to map to the type. 0 means the ID is computed during registration
+        /// or source generation.
         /// </summary>
         public int Id { get; }
 
@@ -52,5 +54,13 @@ namespace Moquestra.TypeIds
         /// and the ID is determined by <see cref="Id"/> or the type's full name.
         /// </summary>
         public string? Alias { get; }
+
+        /// <summary>
+        /// Gets or sets whether the source generator excludes this type from its generated map.
+        /// The default is <see langword="false"/>. When set to <see langword="true"/>, the type
+        /// is excluded only from the generated map; registration by <see cref="TypeIdRegistry"/>
+        /// is unaffected.
+        /// </summary>
+        public bool ExcludeFromGeneratedMap { get; set; }
     }
 }

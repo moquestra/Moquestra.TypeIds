@@ -27,7 +27,7 @@ namespace Moquestra.TypeIds.SourceGenerator
         private static readonly DiagnosticDescriptor InaccessibleType = new DiagnosticDescriptor(
             "MQTID001",
             "Type is not accessible to the generated lookup",
-            "Type '{0}' is skipped because generated code cannot reference it; make the type accessible from another type in the same assembly, or register it with reflection",
+            "Type '{0}' is skipped because generated code cannot reference it; make the type accessible from another type in the same assembly, or set ExcludeFromGeneratedMap to true and register it with reflection",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
@@ -135,6 +135,14 @@ namespace Moquestra.TypeIds.SourceGenerator
                 }
             }
 
+            var excludeFromGeneratedMap = false;
+
+            foreach (var namedArgument in attribute.NamedArguments)
+            {
+                if (namedArgument.Key == "ExcludeFromGeneratedMap" && namedArgument.Value.Value is bool excluded)
+                    excludeFromGeneratedMap = excluded;
+            }
+
             return new TypeIdCandidate(
                 BuildTypeofExpression(symbol),
                 BuildFullName(symbol),
@@ -142,6 +150,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 explicitId,
                 alias,
                 hasInvalidAlias,
+                excludeFromGeneratedMap,
                 IsGenericType(symbol),
                 IsAccessibleFromGeneratedCode(symbol),
                 symbol.Locations.Length > 0 ? symbol.Locations[0] : Location.None);
@@ -288,11 +297,13 @@ namespace Moquestra.TypeIds.SourceGenerator
             // Report only when sanitizing changed the name, and only in a compilation
             // that actually emits the lookup.
             if (mapNamespace.SanitizedFrom is not null)
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     SanitizedNamespace,
                     Location.None,
                     mapNamespace.SanitizedFrom,
                     mapNamespace.Namespace));
+            }
 
             var mappings = new List<TypeIdMappingModel>();
 
@@ -305,7 +316,9 @@ namespace Moquestra.TypeIds.SourceGenerator
                     continue;
                 }
 
-                if (!candidate.IsAccessible)
+                // Excluded types are never referenced by generated code, so accessibility is
+                // not required, and MQTID001 would be noise for an intended registry-only use.
+                if (!candidate.IsAccessible && !candidate.IsExcludedFromMap)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(InaccessibleType, candidate.Location, candidate.DisplayName));
 
@@ -327,8 +340,13 @@ namespace Moquestra.TypeIds.SourceGenerator
             mappings.Sort(static (l, r) => string.CompareOrdinal(l.Candidate.FullName, r.Candidate.FullName));
 
             var seenIds = new Dictionary<int, TypeIdMappingModel>();
+            var emittedIds = new HashSet<int>();
             var accepted = new List<TypeIdMappingModel>();
 
+            // Duplicate ID detection covers every mapping, including excluded ones, because
+            // registry-only types still share the runtime ID space. The mappings that receive
+            // lookup cases are selected separately among the non-excluded ones, so an excluded
+            // type that claims an ID earlier in name order does not affect what is emitted.
             foreach (var mapping in mappings)
             {
                 if (seenIds.TryGetValue(mapping.Id, out var existing))
@@ -339,12 +357,14 @@ namespace Moquestra.TypeIds.SourceGenerator
                         mapping.Id.ToString(CultureInfo.InvariantCulture),
                         existing.Candidate.DisplayName,
                         mapping.Candidate.DisplayName));
-
-                    continue;
+                }
+                else
+                {
+                    seenIds.Add(mapping.Id, mapping);
                 }
 
-                seenIds.Add(mapping.Id, mapping);
-                accepted.Add(mapping);
+                if (!mapping.Candidate.IsExcludedFromMap && emittedIds.Add(mapping.Id))
+                    accepted.Add(mapping);
             }
 
             var typeCases = new List<string>();
@@ -370,8 +390,8 @@ namespace Moquestra.TypeIds.SourceGenerator
             {
                 /// <summary>
                 /// Provides a source-generated bidirectional mapping between the
-                /// <c>[TypeId]</c>-annotated types that generated code can access in this
-                /// assembly and their integer IDs.
+                /// <c>[TypeId]</c>-annotated types included in this map and their
+                /// integer IDs.
                 /// </summary>
                 public static class TypeIdMap
                 {
@@ -508,6 +528,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 int? explicitId,
                 string? alias,
                 bool hasInvalidAlias,
+                bool isExcludedFromMap,
                 bool isGenericType,
                 bool isAccessible,
                 Location location)
@@ -518,6 +539,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 ExplicitId = explicitId;
                 Alias = alias;
                 HasInvalidAlias = hasInvalidAlias;
+                IsExcludedFromMap = isExcludedFromMap;
                 IsGenericType = isGenericType;
                 IsAccessible = isAccessible;
                 Location = location;
@@ -534,6 +556,8 @@ namespace Moquestra.TypeIds.SourceGenerator
             public string? Alias { get; }
 
             public bool HasInvalidAlias { get; }
+
+            public bool IsExcludedFromMap { get; }
 
             public bool IsGenericType { get; }
 

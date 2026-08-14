@@ -22,7 +22,7 @@ Use it when you need a small, stable identifier for a .NET type:
 </ItemGroup>
 ```
 
-The runtime library works on its own; the source generator is optional. Library authors should keep the direct `Moquestra.TypeIds` reference so the dependency reaches their own package, and mark only the generator with `PrivateAssets="all"`.
+The runtime library works on its own; the source generator is optional. Library authors should keep the direct `Moquestra.TypeIds` reference so the dependency reaches their own package, and mark only the generator with `PrivateAssets="all"`. Install both packages at the same version: the attribute and the generator evolve together, and an older generator silently ignores newer attribute options such as `ExcludeFromGeneratedMap`.
 
 ### Supported environments
 
@@ -96,7 +96,7 @@ Lookups always take a `Type` or an ID; an alias is consumed when the ID is compu
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. When that name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006: invalid characters become `_`, a segment gains a leading `_` when it starts with a character that is valid only after the first position (such as a digit) or matches a reserved C# keyword, and an empty segment becomes `_`. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly and generates mappings for those that generated code can access unless `ExcludeFromGeneratedMap` is true. The mappings live in a `TypeIdMap` class generated in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. When that name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006: invalid characters become `_`, a segment gains a leading `_` when it starts with a character that is valid only after the first position (such as a digit) or matches a reserved C# keyword, and an empty segment becomes `_`. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
 
 Install the generator package alongside the runtime package as shown in Installation. The generated lookup methods mirror the registry's lookup API:
 
@@ -108,6 +108,7 @@ Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out 
 - IDs are determined at compile time using the same rules as the runtime registry, so generated and runtime mappings use the same ID for every type handled by both paths.
 - Assemblies with distinct root namespaces get distinct lookup names, so their maps can be referenced side by side.
 - The registry remains available for cases the generator cannot cover, such as assemblies loaded at runtime.
+- Set `ExcludeFromGeneratedMap = true`, as in `[TypeId(1, ExcludeFromGeneratedMap = true)]`, to keep a type out of the generated map. The flag does not affect runtime registration, so the generated map can be a subset of the types registered by an assembly scan. The generator still includes excluded types when detecting duplicate IDs, and the map is generated even when every annotated type is excluded.
 
 The generator reports these diagnostics:
 

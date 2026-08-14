@@ -88,6 +88,31 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void TryGetId_WithExcludedType_ReturnsFalseWhileScanRegistersIt()
+        {
+            var scanned = new TypeIdRegistry();
+
+            scanned.AddFromAssembly(typeof(TypeIdMapTests).Assembly);
+
+            Assert.True(scanned.TryGetId(typeof(TypeIdRegistryTests.ExcludedMessage), out var scannedId));
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(TypeIdRegistryTests.ExcludedMessage)), scannedId);
+
+            Assert.False(TypeIdMap.TryGetId(typeof(TypeIdRegistryTests.ExcludedMessage), out var mapId));
+
+            Assert.Equal(0, mapId);
+        }
+
+        [Fact]
+        public void TryGetType_WithExcludedTypeId_ReturnsFalseAndNull()
+        {
+            var id = TypeIdRegistry.ComputeId(typeof(TypeIdRegistryTests.ExcludedMessage));
+
+            Assert.False(TypeIdMap.TryGetType(id, out var type));
+
+            Assert.Null(type);
+        }
+
+        [Fact]
         public void TryGetId_WithUnmappedType_ReturnsFalseAndZero()
         {
             Assert.False(TypeIdMap.TryGetId(typeof(string), out var id));
