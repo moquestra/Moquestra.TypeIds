@@ -27,7 +27,7 @@ The runtime library works on its own; the source generator is optional. Library 
 ### Supported environments
 
 - Runtime library: targets `netstandard2.1` and is compatible with .NET Core 3.0+ and .NET 5+, but not with .NET Framework.
-- Source generator: requires a Roslyn 4.3+ compiler host — .NET SDK 6.0.400+ or Visual Studio 2022 17.3+. IDE design-time support also requires a compatible Roslyn host; if generated code is missing only in the editor, update the IDE. If the build reports warning CS9057 and `TypeIdMap` is missing, the host compiler is too old. Generated code compiles under C# 8.0 or later.
+- Source generator: requires a Roslyn 4.3+ compiler host: .NET SDK 6.0.400+ or Visual Studio 2022 17.3+. IDE design-time support also requires a compatible Roslyn host; if generated code is missing only in the editor, update the IDE. If the build reports warning CS9057 and `TypeIdMap` is missing, the host compiler is too old. Generated code compiles under C# 8.0 or later.
 - Trimming and Native AOT: `AddFromAssembly` discovers types through reflection, so trimmed deployments can remove annotated types and silently skip them. Prefer the source generator there; its `typeof` references keep the mapped types rooted.
 
 ## Usage
@@ -80,7 +80,7 @@ typeof(KickNotification) -> -2036228135
 - Generic types are not supported. Registering one throws an `ArgumentException`.
 - `Add(Type)` determines the ID from the `TypeIdAttribute` applied to the type and throws an `ArgumentException` if the attribute is missing.
 - When the attribute specifies neither a nonzero ID nor an alias, the ID is computed from the type's full name. Computed IDs are always negative, so they never collide with positive manual IDs.
-- A string alias — `[TypeId("Session.Kick")]` or `Add(type, "Session.Kick")` — is hashed instead of the type's full name, so changing the type's name or namespace does not change the ID.
+- A string alias supplied through `[TypeId("Session.Kick")]` or `Add(type, "Session.Kick")` is hashed instead of the type's full name, so changing the type's name or namespace does not change the ID.
 - An ID computed from the type's full name changes when the type is renamed or moved to another namespace. To preserve compatibility with persisted data, use the type's previous full name as its alias; this preserves the previous computed ID.
 - If a full name or alias hashes to an ID already mapped to another type, registration throws; assign an explicit ID to either type to resolve the collision.
 - `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
@@ -96,7 +96,7 @@ Lookups always take a `Type` or an ID; an alias is consumed when the ID is compu
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly, excluding those that generated code cannot reference, and generates a `TypeIdMap` class in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available. When that name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006: invalid characters become `_`, a segment gains a leading `_` when it starts with a character that is valid only after the first position (such as a digit) or matches a reserved C# keyword, and an empty segment becomes `_`. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
 
 Install the generator package alongside the runtime package as shown in Installation. The generated lookup methods mirror the registry's lookup API:
 
@@ -118,3 +118,4 @@ The generator reports these diagnostics:
 | MQTID003 | Error | An ID is mapped to more than one type. |
 | MQTID004 | Error | The generated lookup type conflicts with an existing type in the assembly. |
 | MQTID005 | Error | The annotated type is a generic type, which is not supported. |
+| MQTID006 | Warning | The root namespace or assembly name could not be used directly as a namespace, so it was sanitized. |

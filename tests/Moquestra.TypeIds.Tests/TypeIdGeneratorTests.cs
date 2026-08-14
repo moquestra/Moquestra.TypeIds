@@ -31,7 +31,6 @@ namespace Moquestra.TypeIds.Tests
             Assert.Empty(diagnostics);
 
             Assert.Contains("class TypeIdMap", generated, StringComparison.Ordinal);
-
             Assert.Contains("typeof(global::Message)", generated, StringComparison.Ordinal);
 
             Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
@@ -60,6 +59,18 @@ namespace Moquestra.TypeIds.Tests
                     public static class TypeIdMap { }
                 }
                 """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithoutAnnotatedTypes_IgnoresHyphenatedAssemblyName()
+        {
+            var (diagnostics, generated, _) = Run("""
+                public sealed class Message { }
+                """, assemblyName: "Assembly-CSharp");
 
             Assert.Empty(diagnostics);
 
@@ -158,7 +169,6 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
 
             Assert.Contains("First", diagnostic.GetMessage(), StringComparison.Ordinal);
-
             Assert.Contains("Second", diagnostic.GetMessage(), StringComparison.Ordinal);
 
             Assert.True(diagnostic.Location.IsInSource);
@@ -398,6 +408,30 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Run_WithUserDeclaredTypeIdMapUnderSanitizedNamespace_ReportsGeneratedTypeConflictError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                namespace Assembly_CSharp.Generated
+                {
+                    public static class TypeIdMap { }
+                }
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, assemblyName: "Assembly-CSharp");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID004", diagnostic.Id);
+
+            Assert.Contains("Assembly_CSharp.Generated.TypeIdMap", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
         public void Run_WithTypeIdMapInUnrelatedNamespace_GeneratesLookupWithoutConflict()
         {
             var (diagnostics, generated, output) = Run("""
@@ -415,6 +449,101 @@ namespace Moquestra.TypeIds.Tests
             Assert.Empty(diagnostics);
 
             Assert.Contains("typeof(global::Message)", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithHyphenatedAssemblyName_SanitizesGeneratedNamespaceAndWarns()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, assemblyName: "Assembly-CSharp");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID006", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+
+            Assert.Contains("Assembly-CSharp", diagnostic.GetMessage(), StringComparison.Ordinal);
+            Assert.Contains("Assembly_CSharp.Generated", diagnostic.GetMessage(), StringComparison.Ordinal);
+            Assert.Contains("namespace Assembly_CSharp.Generated", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDigitLeadingAssemblyName_SanitizesGeneratedNamespace()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, assemblyName: "2DGame");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID006", diagnostic.Id);
+
+            Assert.Contains("namespace _2DGame.Generated", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithEmptyNamespaceSegment_SanitizesGeneratedNamespace()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, "Custom..Root");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID006", diagnostic.Id);
+
+            Assert.Contains("namespace Custom._.Root.Generated", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithKeywordAssemblyName_SanitizesGeneratedNamespace()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, assemblyName: "int");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID006", diagnostic.Id);
+
+            Assert.Contains("namespace _int.Generated", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithFormatCharacterInAssemblyName_SanitizesGeneratedNamespace()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """, assemblyName: "F\u00ADoo");
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID006", diagnostic.Id);
+
+            Assert.Contains("namespace F_oo.Generated", generated, StringComparison.Ordinal);
 
             Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
         }

@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 using CodegenCS;
@@ -60,6 +62,14 @@ namespace Moquestra.TypeIds.SourceGenerator
             "Type '{0}' is a generic type, which is not supported",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor SanitizedNamespace = new DiagnosticDescriptor(
+            "MQTID006",
+            "Generated namespace was sanitized",
+            "The root namespace or assembly name '{0}' cannot be used directly as a namespace, so the generated lookup is placed in '{1}'; set a root namespace or assembly name that can be used as a namespace without sanitization to control the generated namespace",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
 
         /// <inheritdoc/>
@@ -175,20 +185,81 @@ namespace Moquestra.TypeIds.SourceGenerator
 
         // The lookup namespace is derived from the consuming project's root namespace,
         // falling back to its assembly name. Assemblies with distinct derived namespaces
-        // can each expose a public map without colliding. The name is used as-is: an
-        // invalid root namespace or assembly name fails the build in the generated file
-        // instead of being sanitized here.
-        private static string BuildGeneratedNamespace(string? rootNamespace, string? assemblyName)
+        // can each expose a public map without colliding. A name that cannot be used
+        // directly as a namespace is sanitized to keep the generated file compiling, and
+        // the original name is returned with the sanitized namespace so MQTID006 can
+        // report both (Unity's default Assembly-CSharp assembly is the canonical example).
+        private static (string Namespace, string? SanitizedFrom) BuildGeneratedNamespace(string? rootNamespace, string? assemblyName)
         {
             var prefix = string.IsNullOrEmpty(rootNamespace) ? assemblyName : rootNamespace;
 
             // A compilation without an assembly name falls back to the previous fixed namespace.
-            return string.IsNullOrEmpty(prefix)
-                ? "Moquestra.TypeIds" + GeneratedNamespaceSuffix
-                : prefix + GeneratedNamespaceSuffix;
+            if (string.IsNullOrEmpty(prefix))
+                return ("Moquestra.TypeIds" + GeneratedNamespaceSuffix, null);
+
+            var sanitized = SanitizeNamespace(prefix!);
+
+            return (sanitized + GeneratedNamespaceSuffix, sanitized == prefix ? null : prefix);
         }
 
-        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, Location Location)> conflicts, string mapNamespace)
+        // Invalid characters are replaced with '_', segments that start with a character
+        // valid only after the first position (such as a digit) or match a C# reserved
+        // keyword are prefixed with '_', and empty segments become '_'. Character and
+        // keyword checks use the compiler's own SyntaxFacts, except that Unicode format
+        // characters are treated as invalid: they pass the identifier check but the
+        // compiler strips them from the semantic name, which would let the source
+        // spelling and the semantic namespace diverge. The generator owns this name, so
+        // it can be transformed instead of escaped with verbatim '@' identifiers, and
+        // the map namespace plays no part in ID computation, leaving the hash contract
+        // unaffected.
+        private static string SanitizeNamespace(string prefix)
+        {
+            var segments = prefix.Split('.');
+            var builder = new StringBuilder(prefix.Length + 1);
+
+            for (var i = 0; i < segments.Length; i++)
+            {
+                if (i > 0)
+                    builder.Append('.');
+
+                builder.Append(SanitizeSegment(segments[i]));
+            }
+
+            return builder.ToString();
+        }
+
+        private static string SanitizeSegment(string segment)
+        {
+            if (segment.Length == 0)
+                return "_";
+
+            var builder = new StringBuilder(segment.Length + 1);
+            var first = segment[0];
+
+            if (!SyntaxFacts.IsIdentifierStartCharacter(first) && CanPreserveIdentifierCharacter(first))
+                builder.Append('_');
+
+            builder.Append(CanPreserveIdentifierCharacter(first) ? first : '_');
+
+            for (var i = 1; i < segment.Length; i++)
+            {
+                var next = segment[i];
+
+                builder.Append(CanPreserveIdentifierCharacter(next) ? next : '_');
+            }
+
+            var sanitized = builder.ToString();
+
+            return SyntaxFacts.GetKeywordKind(sanitized) == SyntaxKind.None ? sanitized : "_" + sanitized;
+        }
+
+        private static bool CanPreserveIdentifierCharacter(char value)
+        {
+            return SyntaxFacts.IsIdentifierPartCharacter(value)
+                && CharUnicodeInfo.GetUnicodeCategory(value) != UnicodeCategory.Format;
+        }
+
+        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, Location Location)> conflicts, (string Namespace, string? SanitizedFrom) mapNamespace)
         {
             // Installing the generator alone must not change the assembly's public API.
             // When no types are annotated, nothing is emitted, so a user-declared type with
@@ -200,19 +271,28 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             foreach (var conflict in conflicts)
             {
-                if (conflict.Namespace != mapNamespace)
+                if (conflict.Namespace != mapNamespace.Namespace)
                     continue;
 
                 context.ReportDiagnostic(Diagnostic.Create(
                     GeneratedTypeConflict,
                     conflict.Location,
-                    mapNamespace + "." + GeneratedMapName));
+                    mapNamespace.Namespace + "." + GeneratedMapName));
 
                 hasConflict = true;
             }
 
             if (hasConflict)
                 return;
+
+            // Report only when sanitizing changed the name, and only in a compilation
+            // that actually emits the lookup.
+            if (mapNamespace.SanitizedFrom is not null)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    SanitizedNamespace,
+                    Location.None,
+                    mapNamespace.SanitizedFrom,
+                    mapNamespace.Namespace));
 
             var mappings = new List<TypeIdMappingModel>();
 
@@ -286,7 +366,7 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             #nullable enable
 
-            namespace {{mapNamespace}}
+            namespace {{mapNamespace.Namespace}}
             {
                 /// <summary>
                 /// Provides a source-generated bidirectional mapping between the
