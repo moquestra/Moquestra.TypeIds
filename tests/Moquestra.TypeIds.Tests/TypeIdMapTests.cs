@@ -152,5 +152,37 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.Equal(0, id);
         }
+
+        [Fact]
+        public void TryGetId_WithDomainDeclaredType_ReturnsFalseAndZero()
+        {
+            Assert.False(TypeIdMap.TryGetId(typeof(TypeIdRegistryTests.AuthMessage), out var id));
+
+            Assert.Equal(0, id);
+        }
+
+        [Fact]
+        public void TryGetId_OnDomainMap_WithExplicitId_ReturnsSpecifiedId()
+        {
+            Assert.True(AuthTypeIdMap.TryGetId(typeof(TypeIdRegistryTests.AuthCommand), out var id));
+
+            Assert.Equal(1000, id);
+        }
+
+        [Fact]
+        public void TryGetId_OnDomainMap_WithComputedId_MatchesRuntimeComputation()
+        {
+            Assert.True(AuthTypeIdMap.TryGetId(typeof(TypeIdRegistryTests.AuthMessage), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(TypeIdRegistryTests.AuthMessage)), id);
+        }
+
+        [Fact]
+        public void TryGetType_OnDomainMap_WithOtherDomainId_ReturnsFalseAndNull()
+        {
+            Assert.False(SessionTypeIdMap.TryGetType(1000, out var type));
+
+            Assert.Null(type);
+        }
     }
 }

@@ -415,6 +415,29 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal(TypeIdRegistry.ComputeId(typeof(LegacyMessage)), id);
         }
 
+        [Fact]
+        public void AddFromAssembly_WithDomainDeclaredTypes_RegistersThem()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly);
+
+            Assert.True(registry.TryGetId(typeof(AuthMessage), out _));
+            Assert.True(registry.TryGetId(typeof(SessionMessage), out _));
+            Assert.True(registry.TryGetId(typeof(AuthCommand), out var commandId));
+            Assert.Equal(1000, commandId);
+        }
+
+        [Fact]
+        public void Add_WithDomainDeclaration_RegistersType()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.Add(typeof(SessionMessage));
+
+            Assert.True(registry.TryGetId(typeof(SessionMessage), out _));
+        }
+
         [TypeId(10)]
         internal sealed class AnnotatedMessage { }
 
@@ -442,5 +465,14 @@ namespace Moquestra.TypeIds.Tests
 
         [TypeId(ExcludeFromGeneratedMap = true)]
         internal sealed class ExcludedMessage { }
+
+        [TypeId(Domain = "Auth")]
+        internal sealed class AuthMessage { }
+
+        [TypeId(1000, Domain = "Auth")]
+        internal sealed class AuthCommand { }
+
+        [TypeId(Domain = "Session")]
+        internal sealed class SessionMessage { }
     }
 }

@@ -101,7 +101,27 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.True(diagnostic.Location.IsInSource);
 
-            Assert.DoesNotContain("Hidden", generated, StringComparison.Ordinal);
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithDomainDeclaredPrivateNestedType_ReportsInaccessibleTypeWarningAndGeneratesNothing()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                public class Container
+                {
+                    [TypeId(1, Domain = "Auth")]
+                    private sealed class Hidden { }
+                }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID001", diagnostic.Id);
+
+            Assert.Equal(string.Empty, generated);
         }
 
         [Fact]
@@ -687,6 +707,331 @@ namespace Moquestra.TypeIds.Tests
             Assert.DoesNotContain("case ", generated, StringComparison.Ordinal);
 
             Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDomainDeclaredTypes_GeneratesMapPerDomain()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Plain { }
+
+                [TypeId(2, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(3, Domain = "Session")]
+                public sealed class Kick { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            var defaultIndex = generated.IndexOf("class TypeIdMap", StringComparison.Ordinal);
+            var authIndex = generated.IndexOf("class AuthTypeIdMap", StringComparison.Ordinal);
+            var sessionIndex = generated.IndexOf("class SessionTypeIdMap", StringComparison.Ordinal);
+            var loginIndex = generated.IndexOf("typeof(global::Login)", StringComparison.Ordinal);
+
+            Assert.True(defaultIndex >= 0);
+            Assert.True(authIndex > defaultIndex);
+            Assert.True(sessionIndex > authIndex);
+            Assert.True(loginIndex > authIndex);
+            Assert.True(loginIndex < sessionIndex);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithSameIdInDifferentDomains_ReportsNoDuplicateIdError()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Plain { }
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("typeof(global::Plain)", generated, StringComparison.Ordinal);
+            Assert.Contains("typeof(global::Login)", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDuplicateIdInSameDomain_ReportsDuplicateIdError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class First { }
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Second { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID003", diagnostic.Id);
+
+            Assert.Contains("typeof(global::First)", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("typeof(global::Second)", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithEmptyDomain_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "")]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+
+            Assert.Contains("Message", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.True(diagnostic.Location.IsInSource);
+
+            Assert.DoesNotContain("Message", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithNullDomain_TreatsTypeAsDefaultDomain()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = null)]
+                public sealed class Message { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("typeof(global::Message)", generated, StringComparison.Ordinal);
+            Assert.Equal(
+                generated.IndexOf("static class ", StringComparison.Ordinal),
+                generated.LastIndexOf("static class ", StringComparison.Ordinal));
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDomainOnlyTypes_OmitsDefaultMap()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("class TypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithOnlyExcludedDomainTypes_GeneratesDomainMapWithoutCases()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth", ExcludeFromGeneratedMap = true)]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("case ", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithUserDeclaredTypeIdMapAndDomainOnlyTypes_GeneratesDomainMapWithoutConflict()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                namespace GeneratorTestAssembly.Generated
+                {
+                    public static class TypeIdMap { }
+                }
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithEmptyDomainOnExcludedType_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "", ExcludeFromGeneratedMap = true)]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithHyphenatedDomain_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "My-Auth")]
+                public sealed class Login { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+
+            Assert.Contains("'My-Auth'", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithWhitespaceDomain_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = " ")]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithDigitLeadingDomain_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "2D")]
+                public sealed class Sprite { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithNonAsciiDomain_ReportsInvalidDomainError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "인증")]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID007", diagnostic.Id);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithKeywordDomain_GeneratesKeywordPrefixedMap()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "if")]
+                public sealed class Branch { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class ifTypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithUnderscoreAndDigitDomain_GeneratesMap()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "_2D")]
+                public sealed class Sprite { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class _2DTypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithUserDeclaredDomainMap_ReportsGeneratedTypeConflictError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                namespace GeneratorTestAssembly.Generated
+                {
+                    public static class AuthTypeIdMap { }
+                }
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID004", diagnostic.Id);
+
+            Assert.Contains("GeneratorTestAssembly.Generated.AuthTypeIdMap", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Equal(string.Empty, generated);
         }
 
         private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource, Compilation Output) Run(string source, string? rootNamespace = null, string? assemblyName = "GeneratorTestAssembly")

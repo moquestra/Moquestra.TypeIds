@@ -6,3 +6,4 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 MQTID006 | Moquestra.TypeIds | Warning | Generated namespace was sanitized
+MQTID007 | Moquestra.TypeIds | Error | Invalid domain name

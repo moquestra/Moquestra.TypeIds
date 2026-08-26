@@ -7,7 +7,9 @@ namespace Moquestra.TypeIds
     /// A nonzero ID is used directly, while an alias is used to compute the ID.
     /// If neither is specified, the ID is computed from the type's full name.
     /// <see cref="ExcludeFromGeneratedMap"/> controls whether the source generator includes
-    /// the type in its generated map. Applying this attribute to a generic type is not supported.
+    /// the type in its generated map.
+    /// <see cref="Domain"/> controls which generated map the source generator places the type in.
+    /// Applying this attribute to a generic type is not supported.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
     public sealed class TypeIdAttribute : Attribute
@@ -62,5 +64,18 @@ namespace Moquestra.TypeIds
         /// is unaffected.
         /// </summary>
         public bool ExcludeFromGeneratedMap { get; set; }
+
+        /// <summary>
+        /// Gets or sets the domain that determines which source-generated map the type is placed in.
+        /// The default is <see langword="null"/>: the type belongs to the default domain and is
+        /// placed in <c>TypeIdMap</c>. A domain is case-sensitive and becomes the map class prefix
+        /// exactly as declared, such as <c>AuthTypeIdMap</c> for the "Auth" domain. It must start
+        /// with an ASCII letter or underscore and contain only ASCII letters, digits, and
+        /// underscores; the source generator reports a violation as an error.
+        /// <see cref="ExcludeFromGeneratedMap"/> still controls whether the type appears in that
+        /// map's lookup cases. Registration by <see cref="TypeIdRegistry"/> and ID computation
+        /// both ignore the domain.
+        /// </summary>
+        public string? Domain { get; set; }
     }
 }
