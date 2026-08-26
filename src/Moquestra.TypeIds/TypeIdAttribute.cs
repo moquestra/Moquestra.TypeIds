@@ -67,11 +67,13 @@ namespace Moquestra.TypeIds
 
         /// <summary>
         /// Gets or sets the domain that determines which source-generated map the type is placed in.
-        /// The default is <see langword="null"/>: the type belongs to the default domain and is
-        /// placed in <c>TypeIdMap</c>. A domain is case-sensitive and becomes the map class prefix
-        /// exactly as declared, such as <c>AuthTypeIdMap</c> for the "Auth" domain. It must start
-        /// with an ASCII letter or underscore and contain only ASCII letters, digits, and
-        /// underscores; the source generator reports a violation as an error.
+        /// The default is <see langword="null"/>: the type belongs to the default domain.
+        /// With fallback naming, the default domain uses <c>TypeIdMap</c>, while a named domain
+        /// uses its declared name as the map class prefix, such as <c>AuthTypeIdMap</c> for the
+        /// "Auth" domain. A domain is case-sensitive and must start with an ASCII letter or
+        /// underscore and contain only ASCII letters, digits, and underscores; the source
+        /// generator reports a violation as an error. The full name of a map can be overridden
+        /// with <see cref="TypeIdMapNameAttribute"/>.
         /// <see cref="ExcludeFromGeneratedMap"/> still controls whether the type appears in that
         /// map's lookup cases. Registration by <see cref="TypeIdRegistry"/> and ID computation
         /// both ignore the domain.

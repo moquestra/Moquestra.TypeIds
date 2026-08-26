@@ -23,6 +23,7 @@ namespace Moquestra.TypeIds.SourceGenerator
     public sealed class TypeIdGenerator : IIncrementalGenerator
     {
         private const string AttributeMetadataName = "Moquestra.TypeIds.TypeIdAttribute";
+        private const string MapNameAttributeMetadataName = "Moquestra.TypeIds.TypeIdMapNameAttribute";
         private const string GeneratedNamespaceSuffix = ".Generated";
         private const string GeneratedMapName = "TypeIdMap";
 
@@ -74,6 +75,38 @@ namespace Moquestra.TypeIds.SourceGenerator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor InvalidMapName = new DiagnosticDescriptor(
+            "MQTID008",
+            "Invalid map name",
+            "The map name '{0}' is invalid; it must be a dot-separated namespace and class name, and each segment must start with an ASCII letter or underscore, contain only ASCII letters, digits, and underscores, and not be a C# reserved keyword",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor DuplicateMapName = new DiagnosticDescriptor(
+            "MQTID009",
+            "Duplicate map name for a domain",
+            "The map name for domain '{0}' is specified more than once; specify at most one per domain",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor MapNameCollision = new DiagnosticDescriptor(
+            "MQTID010",
+            "Generated map name collision",
+            "The maps for domain '{1}' and domain '{2}' both use the name '{0}'; specify distinct names",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor UnknownMapNameDomain = new DiagnosticDescriptor(
+            "MQTID011",
+            "Map name for an unknown domain",
+            "No type belongs to domain '{0}', so the configured map name has no effect; check the spelling and casing",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
         private static readonly DiagnosticDescriptor SanitizedNamespace = new DiagnosticDescriptor(
             "MQTID006",
             "Generated namespace was sanitized",
@@ -108,9 +141,17 @@ namespace Moquestra.TypeIds.SourceGenerator
                 .Combine(context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName))
                 .Select(static (names, _) => BuildGeneratedNamespace(names.Left, names.Right));
 
+            var mapNames = context.SyntaxProvider
+                .ForAttributeWithMetadataName(
+                    MapNameAttributeMetadataName,
+                    static (node, _) => node is CompilationUnitSyntax,
+                    static (attributeContext, _) => CaptureMapNames(attributeContext))
+                .SelectMany(static (designations, _) => designations)
+                .Collect();
+
             context.RegisterSourceOutput(
-                candidates.Combine(conflicts).Combine(mapNamespace),
-                static (productionContext, input) => Emit(productionContext, input.Left.Left, input.Left.Right, input.Right));
+                candidates.Combine(conflicts).Combine(mapNamespace).Combine(mapNames),
+                static (productionContext, input) => Emit(productionContext, input.Left.Left.Left, input.Left.Left.Right, input.Left.Right, input.Right));
         }
 
         private static TypeIdCandidate Capture(GeneratorAttributeSyntaxContext context)
@@ -178,9 +219,36 @@ namespace Moquestra.TypeIds.SourceGenerator
                 symbol.Locations.Length > 0 ? symbol.Locations[0] : Location.None);
         }
 
-        // Domain map names are dynamic, so the predicate cannot know the exact names.
-        // The suffix is matched broadly and compared against the actual generated
-        // names during emission.
+        private static ImmutableArray<MapNameDesignation> CaptureMapNames(GeneratorAttributeSyntaxContext context)
+        {
+            var builder = ImmutableArray.CreateBuilder<MapNameDesignation>(context.Attributes.Length);
+
+            foreach (var attribute in context.Attributes)
+            {
+                string? name = null;
+
+                if (attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is string nameValue)
+                    name = nameValue;
+
+                string? domain = null;
+
+                foreach (var namedArgument in attribute.NamedArguments)
+                {
+                    if (namedArgument.Key == "Domain" && namedArgument.Value.Value is string domainValue)
+                        domain = domainValue;
+                }
+
+                var syntax = attribute.ApplicationSyntaxReference?.GetSyntax();
+
+                builder.Add(new MapNameDesignation(name, domain, syntax?.GetLocation() ?? Location.None));
+            }
+
+            return builder.MoveToImmutable();
+        }
+
+        // The conflict predicate covers fallback-style names only: the TypeIdMap suffix
+        // is matched broadly and compared against the actual generated names during
+        // emission. Collisions with arbitrary configured names are left to compiler errors.
         private static bool IsPotentialConflict(SyntaxNode node)
         {
             return node switch
@@ -324,12 +392,12 @@ namespace Moquestra.TypeIds.SourceGenerator
             return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') || value == '_';
         }
 
-        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, string Name, Location Location)> conflicts, (string Namespace, string? SanitizedFrom) mapNamespace)
+        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, string Name, Location Location)> conflicts, (string Namespace, string? SanitizedFrom) mapNamespace, ImmutableArray<MapNameDesignation> mapNames)
         {
-            // Installing the generator alone must not change the assembly's public API.
-            // When no types are annotated, nothing is emitted, so a user-declared type with
-            // a map name cannot conflict with generated code that does not exist.
-            if (candidates.IsEmpty)
+            // Installing the generator alone must not change the assembly's public API:
+            // with no annotated types or map name designations, nothing is emitted, so
+            // no user-declared type can conflict with generated code.
+            if (candidates.IsEmpty && mapNames.IsEmpty)
                 return;
 
             var mappings = new List<TypeIdMappingModel>();
@@ -392,25 +460,148 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             domains.AddRange(declaredDomains);
 
+            // A domain exists when any type declares it with a valid name - eligibility
+            // is ignored so rejection errors do not cascade into unused-name warnings.
+            var declaredDomainNames = new HashSet<string>(StringComparer.Ordinal);
+            var hasDefaultDeclaration = false;
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.HasInvalidDomain)
+                    continue;
+
+                if (candidate.Domain is null)
+                    hasDefaultDeclaration = true;
+                else
+                    declaredDomainNames.Add(candidate.Domain);
+            }
+
+            var designationCounts = new Dictionary<(bool IsDefault, string Domain), int>();
+
+            foreach (var designation in mapNames)
+            {
+                var key = BuildDesignationKey(designation.Domain);
+
+                designationCounts[key] = designationCounts.TryGetValue(key, out var count) ? count + 1 : 1;
+            }
+
+            var assignedNames = new Dictionary<(bool IsDefault, string Domain), (string Namespace, string ClassName, Location Location)>();
+
+            foreach (var designation in mapNames)
+            {
+                var key = BuildDesignationKey(designation.Domain);
+
+                if (designationCounts[key] > 1)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DuplicateMapName,
+                        designation.Location,
+                        designation.Domain ?? "(default)"));
+
+                    continue;
+                }
+
+                if (!IsValidMapName(designation.Name))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        InvalidMapName,
+                        designation.Location,
+                        designation.Name ?? string.Empty));
+
+                    continue;
+                }
+
+                var exists = designation.Domain is null
+                    ? hasDefaultDeclaration
+                    : declaredDomainNames.Contains(designation.Domain);
+
+                if (!exists)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UnknownMapNameDomain,
+                        designation.Location,
+                        designation.Domain ?? "(default)"));
+
+                    continue;
+                }
+
+                var separator = designation.Name!.LastIndexOf('.');
+
+                assignedNames.Add(key, (
+                    designation.Name.Substring(0, separator),
+                    designation.Name.Substring(separator + 1),
+                    designation.Location));
+            }
+
             if (domains.Count == 0)
                 return;
 
-            var classNames = new HashSet<string>(StringComparer.Ordinal);
+            var finalNames = new Dictionary<(bool IsDefault, string Domain), (string Namespace, string ClassName)>();
+
+            // MQTID004 covers fallback-named maps only; configured names are left to
+            // compiler errors even when they end in TypeIdMap.
+            var fallbackIdentities = new HashSet<(string Namespace, string ClassName)>();
+            var usesFallbackName = false;
 
             foreach (var domain in domains)
-                classNames.Add(BuildClassName(domain));
+            {
+                var key = BuildDesignationKey(domain);
+
+                if (assignedNames.TryGetValue(key, out var assigned))
+                {
+                    finalNames[key] = (assigned.Namespace, assigned.ClassName);
+                }
+                else
+                {
+                    finalNames[key] = (mapNamespace.Namespace, BuildClassName(domain));
+                    fallbackIdentities.Add(finalNames[key]);
+                    usesFallbackName = true;
+                }
+            }
+
+            var fullNameOwners = new Dictionary<string, string?>(StringComparer.Ordinal);
+            var hasNameCollision = false;
+
+            foreach (var domain in domains)
+            {
+                var name = finalNames[BuildDesignationKey(domain)];
+                var fullName = name.Namespace + "." + name.ClassName;
+
+                if (fullNameOwners.TryGetValue(fullName, out var owner))
+                {
+                    var location = assignedNames.TryGetValue(BuildDesignationKey(domain), out var assigned)
+                        ? assigned.Location
+                        : assignedNames.TryGetValue(BuildDesignationKey(owner), out var ownerAssigned) ? ownerAssigned.Location : Location.None;
+
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        MapNameCollision,
+                        location,
+                        fullName,
+                        owner ?? "(default)",
+                        domain ?? "(default)"));
+
+                    hasNameCollision = true;
+                }
+                else
+                {
+                    fullNameOwners.Add(fullName, domain);
+                }
+            }
+
+            if (hasNameCollision)
+                return;
 
             var hasConflict = false;
 
             foreach (var conflict in conflicts)
             {
-                if (conflict.Namespace != mapNamespace.Namespace || !classNames.Contains(conflict.Name))
+                if (!fallbackIdentities.Contains((conflict.Namespace, conflict.Name)))
                     continue;
 
                 context.ReportDiagnostic(Diagnostic.Create(
                     GeneratedTypeConflict,
                     conflict.Location,
-                    mapNamespace.Namespace + "." + conflict.Name));
+                    conflict.Namespace + "." + conflict.Name));
 
                 hasConflict = true;
             }
@@ -418,9 +609,8 @@ namespace Moquestra.TypeIds.SourceGenerator
             if (hasConflict)
                 return;
 
-            // Report only when sanitizing changed the name, and only in a compilation
-            // that actually emits the lookup.
-            if (mapNamespace.SanitizedFrom is not null)
+            // Report only when the generated code uses the sanitized fallback prefix.
+            if (usesFallbackName && mapNamespace.SanitizedFrom is not null)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     SanitizedNamespace,
@@ -429,7 +619,8 @@ namespace Moquestra.TypeIds.SourceGenerator
                     mapNamespace.Namespace));
             }
 
-            var classBlocks = new List<string>();
+            var namespaceOrder = new List<string>();
+            var namespaceBlocks = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
             foreach (var domain in domains)
             {
@@ -465,7 +656,32 @@ namespace Moquestra.TypeIds.SourceGenerator
                         accepted.Add(mapping);
                 }
 
-                classBlocks.Add(BuildMapClass(BuildClassName(domain), domain, accepted));
+                var (targetNamespace, className) = finalNames[BuildDesignationKey(domain)];
+
+                if (!namespaceBlocks.TryGetValue(targetNamespace, out var blocks))
+                {
+                    blocks = new List<string>();
+                    namespaceBlocks.Add(targetNamespace, blocks);
+                    namespaceOrder.Add(targetNamespace);
+                }
+
+                blocks.Add(BuildMapClass(className, domain, accepted));
+            }
+
+            var namespaceTexts = new List<string>();
+
+            foreach (var name in namespaceOrder)
+            {
+                var namespaceWriter = new CodegenTextWriter();
+
+                namespaceWriter.Write($$"""
+                namespace {{name}}
+                {
+                    {{string.Join("\n\n", namespaceBlocks[name])}}
+                }
+                """);
+
+                namespaceTexts.Add(namespaceWriter.GetContents());
             }
 
             var writer = new CodegenTextWriter();
@@ -475,10 +691,7 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             #nullable enable
 
-            namespace {{mapNamespace.Namespace}}
-            {
-                {{string.Join("\n\n", classBlocks)}}
-            }
+            {{string.Join("\n\n", namespaceTexts)}}
             """);
 
             context.AddSource("TypeIdMap.g.cs", writer.GetContents().Replace("\r\n", "\n"));
@@ -488,6 +701,35 @@ namespace Moquestra.TypeIds.SourceGenerator
         private static string BuildClassName(string? domain)
         {
             return domain is null ? GeneratedMapName : domain + GeneratedMapName;
+        }
+
+        private static (bool IsDefault, string Domain) BuildDesignationKey(string? domain)
+        {
+            return domain is null ? (true, string.Empty) : (false, domain);
+        }
+
+        // Segments follow the domain rule plus a keyword ban - without a suffix to
+        // absorb them, keyword segments would appear as bare identifiers.
+        private static bool IsValidMapName(string? name)
+        {
+            if (name is null)
+                return false;
+
+            var segments = name.Split('.');
+
+            if (segments.Length < 2)
+                return false;
+
+            foreach (var segment in segments)
+            {
+                if (!IsValidDomainName(segment))
+                    return false;
+
+                if (SyntaxFacts.GetKeywordKind(segment) != SyntaxKind.None)
+                    return false;
+            }
+
+            return true;
         }
 
         private static string BuildMapClass(string className, string? domain, List<TypeIdMappingModel> accepted)
@@ -690,6 +932,22 @@ namespace Moquestra.TypeIds.SourceGenerator
             public bool IsGenericType { get; }
 
             public bool IsAccessible { get; }
+
+            public Location Location { get; }
+        }
+
+        private sealed class MapNameDesignation
+        {
+            public MapNameDesignation(string? name, string? domain, Location location)
+            {
+                Name = name;
+                Domain = domain;
+                Location = location;
+            }
+
+            public string? Name { get; }
+
+            public string? Domain { get; }
 
             public Location Location { get; }
         }
