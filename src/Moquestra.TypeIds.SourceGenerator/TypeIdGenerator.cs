@@ -78,15 +78,15 @@ namespace Moquestra.TypeIds.SourceGenerator
         private static readonly DiagnosticDescriptor InvalidMapName = new DiagnosticDescriptor(
             "MQTID008",
             "Invalid map name",
-            "The map name '{0}' is invalid; it must be a dot-separated namespace and class name, and each segment must start with an ASCII letter or underscore, contain only ASCII letters, digits, and underscores, and not be a C# reserved keyword",
+            "The map name '{0}' is invalid; it must be a dot-separated namespace and class name, and each segment must start with an ASCII letter or underscore, contain only ASCII letters, digits, and underscores, and not be a C# reserved keyword; a domain-less template may additionally use the exact {{Domain}} token",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
         private static readonly DiagnosticDescriptor DuplicateMapName = new DiagnosticDescriptor(
             "MQTID009",
-            "Duplicate map name for a domain",
-            "The map name for domain '{0}' is specified more than once; specify at most one per domain",
+            "Duplicate map name designation",
+            "More than one map name designation targets {0}; specify only one",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -477,26 +477,62 @@ namespace Moquestra.TypeIds.SourceGenerator
             }
 
             var designationCounts = new Dictionary<(bool IsDefault, string Domain), int>();
+            var templateCount = 0;
 
             foreach (var designation in mapNames)
             {
+                if (IsTemplateCandidate(designation))
+                {
+                    templateCount++;
+
+                    continue;
+                }
+
                 var key = BuildDesignationKey(designation.Domain);
 
                 designationCounts[key] = designationCounts.TryGetValue(key, out var count) ? count + 1 : 1;
             }
 
             var assignedNames = new Dictionary<(bool IsDefault, string Domain), (string Namespace, string ClassName, Location Location)>();
+            string? domainTemplate = null;
+            var domainTemplateLocation = Location.None;
 
             foreach (var designation in mapNames)
             {
-                var key = BuildDesignationKey(designation.Domain);
+                var isTemplate = IsTemplateCandidate(designation);
+                var isDuplicate = isTemplate
+                    ? templateCount > 1
+                    : designationCounts[BuildDesignationKey(designation.Domain)] > 1;
 
-                if (designationCounts[key] > 1)
+                if (isDuplicate)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         DuplicateMapName,
                         designation.Location,
-                        designation.Domain ?? "(default)"));
+                        DescribeDesignationTarget(designation, isTemplate)));
+
+                    continue;
+                }
+
+                if (isTemplate)
+                {
+                    // A valid placeholder stands in for the token to validate the template
+                    // itself - leftover braces (unknown tokens) and shape errors are
+                    // caught independently of any domain.
+                    var probe = designation.Name!.Replace("{Domain}", "X");
+
+                    if (probe.Contains("{") || probe.Contains("}") || !IsValidMapName(probe))
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            InvalidMapName,
+                            designation.Location,
+                            designation.Name));
+
+                        continue;
+                    }
+
+                    domainTemplate = designation.Name;
+                    domainTemplateLocation = designation.Location;
 
                     continue;
                 }
@@ -527,7 +563,7 @@ namespace Moquestra.TypeIds.SourceGenerator
 
                 var separator = designation.Name!.LastIndexOf('.');
 
-                assignedNames.Add(key, (
+                assignedNames.Add(BuildDesignationKey(designation.Domain), (
                     designation.Name.Substring(0, separator),
                     designation.Name.Substring(separator + 1),
                     designation.Location));
@@ -550,13 +586,35 @@ namespace Moquestra.TypeIds.SourceGenerator
                 if (assignedNames.TryGetValue(key, out var assigned))
                 {
                     finalNames[key] = (assigned.Namespace, assigned.ClassName);
+
+                    continue;
                 }
-                else
+
+                // The template applies to named domains only.
+                if (domain is not null && domainTemplate is not null)
                 {
-                    finalNames[key] = (mapNamespace.Namespace, BuildClassName(domain));
-                    fallbackIdentities.Add(finalNames[key]);
-                    usesFallbackName = true;
+                    var expanded = domainTemplate.Replace("{Domain}", domain);
+
+                    // The domain value can invalidate an expanded segment, for example
+                    // by forming a reserved keyword.
+                    if (IsValidMapName(expanded))
+                    {
+                        var separator = expanded.LastIndexOf('.');
+
+                        finalNames[key] = (expanded.Substring(0, separator), expanded.Substring(separator + 1));
+
+                        continue;
+                    }
+
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        InvalidMapName,
+                        domainTemplateLocation,
+                        expanded));
                 }
+
+                finalNames[key] = (mapNamespace.Namespace, BuildClassName(domain));
+                fallbackIdentities.Add(finalNames[key]);
+                usesFallbackName = true;
             }
 
             var fullNameOwners = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -706,6 +764,21 @@ namespace Moquestra.TypeIds.SourceGenerator
         private static (bool IsDefault, string Domain) BuildDesignationKey(string? domain)
         {
             return domain is null ? (true, string.Empty) : (false, domain);
+        }
+
+        // Broad on purpose - a left brace routes the designation to template validation,
+        // where unknown tokens are rejected.
+        private static bool IsTemplateCandidate(MapNameDesignation designation)
+        {
+            return designation.Domain is null && designation.Name is not null && designation.Name.Contains("{");
+        }
+
+        private static string DescribeDesignationTarget(MapNameDesignation designation, bool isTemplate)
+        {
+            if (isTemplate)
+                return "all named domains";
+
+            return designation.Domain is null ? "the default domain" : "domain '" + designation.Domain + "'";
         }
 
         // Segments follow the domain rule plus a keyword ban - without a suffix to

@@ -2,8 +2,12 @@ using System;
 
 using Moquestra.TypeIds;
 
-// The full name of a domain map can be overridden with an assembly attribute:
-[assembly: TypeIdMapName("Moquestra.TypeIds.Sample.SessionIds", Domain = "Session")]
+// Without Domain, a designation names the default map. If the name contains
+// {Domain}, it instead provides a template for every named domain. A designation
+// for one domain overrides that template:
+// [assembly: TypeIdMapName("Moquestra.TypeIds.Sample.Ids")]
+[assembly: TypeIdMapName("Moquestra.TypeIds.Sample.{Domain}Ids")]
+// [assembly: TypeIdMapName("Moquestra.TypeIds.Sample.SessionIds", Domain = "Session")]
 
 namespace Moquestra.TypeIds.Sample
 {

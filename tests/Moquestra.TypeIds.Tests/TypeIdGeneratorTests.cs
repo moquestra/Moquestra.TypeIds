@@ -1421,6 +1421,236 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Run_WithDomainTemplate_AppliesToNamedDomains()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+
+                [TypeId(1)]
+                public sealed class Plain { }
+
+                [TypeId(2, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(3, Domain = "Session")]
+                public sealed class Kick { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("namespace Game", generated, StringComparison.Ordinal);
+            Assert.Contains("class AuthMap", generated, StringComparison.Ordinal);
+            Assert.Contains("class SessionMap", generated, StringComparison.Ordinal);
+            Assert.Contains("class TypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDefaultNameAndDomainTemplate_AppliesEachToItsTarget()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.DefaultMap")]
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+
+                [TypeId(1)]
+                public sealed class Plain { }
+
+                [TypeId(2, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class DefaultMap", generated, StringComparison.Ordinal);
+            Assert.Contains("class AuthMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDomainTemplate_DoesNotApplyToDefaultDomain()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+
+                [TypeId(1)]
+                public sealed class Plain { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class TypeIdMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("namespace Game", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDomainTemplateAndExplicitName_PrefersExplicitName()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+                [assembly: TypeIdMapName("Auth.Ids", Domain = "Auth")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(2, Domain = "Session")]
+                public sealed class Kick { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("namespace Auth", generated, StringComparison.Ordinal);
+            Assert.Contains("class Ids", generated, StringComparison.Ordinal);
+            Assert.Contains("class SessionMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("class AuthMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithDuplicateDomainTemplates_ReportsDuplicateError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+                [assembly: TypeIdMapName("Other.{Domain}Map")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Equal(2, diagnostics.Length);
+            Assert.All(diagnostics, static diagnostic => Assert.Equal("MQTID009", diagnostic.Id));
+            Assert.All(diagnostics, static diagnostic => Assert.Contains("all named domains", diagnostic.GetMessage(), StringComparison.Ordinal));
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithUnknownTokenInTemplate_ReportsInvalidMapNameError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Assembly}.{Domain}Map")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID008", diagnostic.Id);
+
+            Assert.Contains("{Assembly}", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithKeywordDomainUnderTemplate_FallsBackAndReportsInvalidMapNameError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("My.{Domain}.Ids")]
+
+                [TypeId(1, Domain = "if")]
+                public sealed class Branch { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID008", diagnostic.Id);
+
+            Assert.Contains("'My.if.Ids'", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Contains("class ifTypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithTemplateAndDomainMatchingTokenText_AppliesTemplateAndReportsUnknownDomainWarning()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+                [assembly: TypeIdMapName("Game.OtherMap", Domain = "{Domain}")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID011", diagnostic.Id);
+
+            Assert.Contains("class AuthMap", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("OtherMap", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithTemplateExpansionCollidingWithExplicitName_ReportsNameCollisionError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map")]
+                [assembly: TypeIdMapName("Game.SessionMap", Domain = "Auth")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(2, Domain = "Session")]
+                public sealed class Kick { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID010", diagnostic.Id);
+
+            Assert.Contains("'Game.SessionMap'", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.Equal(string.Empty, generated);
+        }
+
+        [Fact]
+        public void Run_WithTemplateTokenInDomainDesignation_ReportsInvalidMapNameError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Game.{Domain}Map", Domain = "Auth")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID008", diagnostic.Id);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void Run_WithUserDeclaredDomainMap_ReportsGeneratedTypeConflictError()
         {
             var (diagnostics, generated, _) = Run("""
