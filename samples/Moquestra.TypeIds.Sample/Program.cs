@@ -1,5 +1,10 @@
 using System;
 
+using Moquestra.TypeIds;
+
+// The full name of a domain map can be overridden with an assembly attribute:
+[assembly: TypeIdMapName("Moquestra.TypeIds.Sample.SessionIds", Domain = "Session")]
+
 namespace Moquestra.TypeIds.Sample
 {
     // Example message types
@@ -14,8 +19,8 @@ namespace Moquestra.TypeIds.Sample
 
     // The alias is hashed instead of the type's full name, so changing the type's
     // name or namespace does not change the ID computed from the protocol name "Session.Kick":
-    // The domain affects only the generated maps: this type goes into SessionTypeIdMap
-    // instead of TypeIdMap, while runtime registration ignores the domain:
+    // The domain affects only the generated maps: this type goes into the Session
+    // domain's map instead of TypeIdMap, while runtime registration ignores the domain:
     [TypeId("Session.Kick", Domain = "Session")] internal sealed class KickNotification { }
 
     internal static class Program
@@ -51,8 +56,8 @@ namespace Moquestra.TypeIds.Sample
             // Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetType(2, out var mappedType);
             // Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
 
-            // Look up a domain-declared type through its domain-prefixed map:
-            // Moquestra.TypeIds.Sample.Generated.SessionTypeIdMap.TryGetId(typeof(KickNotification), out var kickMapId);
+            // The assembly attribute above names the Session domain map SessionIds:
+            SessionIds.TryGetId(typeof(KickNotification), out var sessionMapId);
 
             registry.TryGetId(typeof(LoginRequest), out var id);
             registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
@@ -62,6 +67,7 @@ namespace Moquestra.TypeIds.Sample
             Console.WriteLine($"typeof(LoginRequest) -> {id}");
             Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
             Console.WriteLine($"typeof(KickNotification) -> {kickId}");
+            Console.WriteLine($"SessionIds: typeof(KickNotification) -> {sessionMapId}");
             Console.WriteLine($"2 -> {type}");
         }
     }

@@ -4,7 +4,10 @@ using System.Reflection.Emit;
 
 using Xunit;
 
+using Moquestra.TypeIds;
 using Moquestra.TypeIds.Tests.Generated;
+
+[assembly: TypeIdMapName("Moquestra.TypeIds.Tests.Generated.SessionIds", Domain = "Session")]
 
 namespace Moquestra.TypeIds.Tests
 {
@@ -178,9 +181,17 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
-        public void TryGetType_OnDomainMap_WithOtherDomainId_ReturnsFalseAndNull()
+        public void TryGetId_OnConfiguredMap_WithComputedId_MatchesRuntimeComputation()
         {
-            Assert.False(SessionTypeIdMap.TryGetType(1000, out var type));
+            Assert.True(SessionIds.TryGetId(typeof(TypeIdRegistryTests.SessionMessage), out var id));
+
+            Assert.Equal(TypeIdRegistry.ComputeId(typeof(TypeIdRegistryTests.SessionMessage)), id);
+        }
+
+        [Fact]
+        public void TryGetType_OnConfiguredMap_WithOtherDomainId_ReturnsFalseAndNull()
+        {
+            Assert.False(SessionIds.TryGetType(1000, out var type));
 
             Assert.Null(type);
         }
