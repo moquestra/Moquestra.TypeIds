@@ -58,6 +58,25 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Domain_ByDefault_IsNull()
+        {
+            var attribute = new TypeIdAttribute(1);
+
+            Assert.Null(attribute.Domain);
+        }
+
+        [Fact]
+        public void Domain_WhenSet_ExposesValue()
+        {
+            var attribute = new TypeIdAttribute(1)
+            {
+                Domain = "Auth",
+            };
+
+            Assert.Equal("Auth", attribute.Domain);
+        }
+
+        [Fact]
         public void AttributeUsage_WhenInspected_AllowsClassesStructsAndInterfaces()
         {
             var usage = (AttributeUsageAttribute?)Attribute.GetCustomAttribute(

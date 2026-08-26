@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -12,10 +13,11 @@ using CodegenCS;
 namespace Moquestra.TypeIds.SourceGenerator
 {
     /// <summary>
-    /// Collects types annotated with <c>[TypeId]</c> at compile time and generates a
-    /// per-assembly lookup class that can be used instead of <c>TypeIdRegistry</c> for
-    /// lookups. IDs become compile-time constants computed by the same rules as the
-    /// runtime, and lookups are implemented as switch statements without a dictionary.
+    /// Collects types annotated with <c>[TypeId]</c> at compile time and generates
+    /// per-assembly lookup classes, partitioned by domain, that can be used instead of
+    /// <c>TypeIdRegistry</c> for lookups. IDs become compile-time constants computed by
+    /// the same rules as the runtime, and lookups are implemented as switch statements
+    /// without a dictionary.
     /// </summary>
     [Generator]
     public sealed class TypeIdGenerator : IIncrementalGenerator
@@ -60,6 +62,14 @@ namespace Moquestra.TypeIds.SourceGenerator
             "MQTID005",
             "Generic types are not supported",
             "Type '{0}' is a generic type, which is not supported",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor InvalidDomain = new DiagnosticDescriptor(
+            "MQTID007",
+            "Invalid domain name",
+            "Type '{0}' declares the invalid domain '{1}'; a domain must start with an ASCII letter or underscore and contain only ASCII letters, digits, and underscores",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -136,11 +146,21 @@ namespace Moquestra.TypeIds.SourceGenerator
             }
 
             var excludeFromGeneratedMap = false;
+            string? domain = null;
+            var hasInvalidDomain = false;
 
             foreach (var namedArgument in attribute.NamedArguments)
             {
                 if (namedArgument.Key == "ExcludeFromGeneratedMap" && namedArgument.Value.Value is bool excluded)
                     excludeFromGeneratedMap = excluded;
+
+                // An explicit Domain = null is indistinguishable from no declaration,
+                // so it counts as the default domain.
+                if (namedArgument.Key == "Domain" && namedArgument.Value.Value is string domainValue)
+                {
+                    domain = domainValue;
+                    hasInvalidDomain = !IsValidDomainName(domainValue);
+                }
             }
 
             return new TypeIdCandidate(
@@ -151,34 +171,43 @@ namespace Moquestra.TypeIds.SourceGenerator
                 alias,
                 hasInvalidAlias,
                 excludeFromGeneratedMap,
+                domain,
+                hasInvalidDomain,
                 IsGenericType(symbol),
                 IsAccessibleFromGeneratedCode(symbol),
                 symbol.Locations.Length > 0 ? symbol.Locations[0] : Location.None);
         }
 
+        // Domain map names are dynamic, so the predicate cannot know the exact names.
+        // The suffix is matched broadly and compared against the actual generated
+        // names during emission.
         private static bool IsPotentialConflict(SyntaxNode node)
         {
             return node switch
             {
-                BaseTypeDeclarationSyntax declaration => declaration.Identifier.ValueText == GeneratedMapName,
-                DelegateDeclarationSyntax declaration => declaration.Identifier.ValueText == GeneratedMapName,
+                BaseTypeDeclarationSyntax declaration => declaration.Identifier.ValueText.EndsWith(GeneratedMapName, StringComparison.Ordinal),
+                DelegateDeclarationSyntax declaration => declaration.Identifier.ValueText.EndsWith(GeneratedMapName, StringComparison.Ordinal),
                 _ => false,
             };
         }
 
         // The generated namespace is not known at capture time, so the containing
-        // namespace is recorded here and compared against it during emit.
-        private static (string Namespace, Location Location)? CaptureConflict(GeneratorSyntaxContext context)
+        // namespace is recorded here and compared against it during emission.
+        private static (string Namespace, string Name, Location Location)? CaptureConflict(GeneratorSyntaxContext context)
         {
             var symbol = context.SemanticModel.GetDeclaredSymbol(context.Node) as INamedTypeSymbol;
 
-            if (symbol is null || symbol.MetadataName != GeneratedMapName || symbol.ContainingType is not null)
+            if (symbol is null || symbol.ContainingType is not null)
+                return null;
+
+            if (!symbol.MetadataName.EndsWith(GeneratedMapName, StringComparison.Ordinal))
                 return null;
 
             var containingNamespace = symbol.ContainingNamespace;
 
             return (
                 containingNamespace.IsGlobalNamespace ? string.Empty : containingNamespace.ToDisplayString(),
+                symbol.MetadataName,
                 GetIdentifierLocation(context.Node));
         }
 
@@ -268,42 +297,40 @@ namespace Moquestra.TypeIds.SourceGenerator
                 && CharUnicodeInfo.GetUnicodeCategory(value) != UnicodeCategory.Format;
         }
 
-        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, Location Location)> conflicts, (string Namespace, string? SanitizedFrom) mapNamespace)
+        // The domain is used as a class name prefix exactly as spelled, so only the
+        // ASCII identifier set is allowed. Keywords are not rejected because the
+        // suffix makes them valid identifiers.
+        private static bool IsValidDomainName(string domain)
+        {
+            if (domain.Length == 0)
+                return false;
+
+            if (!IsAsciiLetterOrUnderscore(domain[0]))
+                return false;
+
+            for (var i = 1; i < domain.Length; i++)
+            {
+                var next = domain[i];
+
+                if (!IsAsciiLetterOrUnderscore(next) && (next < '0' || next > '9'))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsAsciiLetterOrUnderscore(char value)
+        {
+            return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') || value == '_';
+        }
+
+        private static void Emit(SourceProductionContext context, ImmutableArray<TypeIdCandidate> candidates, ImmutableArray<(string Namespace, string Name, Location Location)> conflicts, (string Namespace, string? SanitizedFrom) mapNamespace)
         {
             // Installing the generator alone must not change the assembly's public API.
             // When no types are annotated, nothing is emitted, so a user-declared type with
-            // the map's name cannot conflict with generated code that does not exist.
+            // a map name cannot conflict with generated code that does not exist.
             if (candidates.IsEmpty)
                 return;
-
-            var hasConflict = false;
-
-            foreach (var conflict in conflicts)
-            {
-                if (conflict.Namespace != mapNamespace.Namespace)
-                    continue;
-
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GeneratedTypeConflict,
-                    conflict.Location,
-                    mapNamespace.Namespace + "." + GeneratedMapName));
-
-                hasConflict = true;
-            }
-
-            if (hasConflict)
-                return;
-
-            // Report only when sanitizing changed the name, and only in a compilation
-            // that actually emits the lookup.
-            if (mapNamespace.SanitizedFrom is not null)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    SanitizedNamespace,
-                    Location.None,
-                    mapNamespace.SanitizedFrom,
-                    mapNamespace.Namespace));
-            }
 
             var mappings = new List<TypeIdMappingModel>();
 
@@ -332,6 +359,13 @@ namespace Moquestra.TypeIds.SourceGenerator
                     continue;
                 }
 
+                if (candidate.HasInvalidDomain)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(InvalidDomain, candidate.Location, candidate.DisplayName, candidate.Domain));
+
+                    continue;
+                }
+
                 var id = candidate.ExplicitId ?? TypeIdHelpers.ComputeId(candidate.Alias ?? candidate.FullName);
 
                 mappings.Add(new TypeIdMappingModel(candidate, id));
@@ -339,34 +373,125 @@ namespace Moquestra.TypeIds.SourceGenerator
 
             mappings.Sort(static (l, r) => string.CompareOrdinal(l.Candidate.FullName, r.Candidate.FullName));
 
-            var seenIds = new Dictionary<int, TypeIdMappingModel>();
-            var emittedIds = new HashSet<int>();
-            var accepted = new List<TypeIdMappingModel>();
+            // A map class is emitted only for domains represented in mappings, including
+            // the default domain. Domains with only excluded mappings keep an empty map.
+            var domains = new List<string?>();
+            var declaredDomains = new SortedSet<string>(StringComparer.Ordinal);
+            var hasDefaultDomain = false;
 
-            // Duplicate ID detection covers every mapping, including excluded ones, because
-            // registry-only types still share the runtime ID space. The mappings that receive
-            // lookup cases are selected separately among the non-excluded ones, so an excluded
-            // type that claims an ID earlier in name order does not affect what is emitted.
             foreach (var mapping in mappings)
             {
-                if (seenIds.TryGetValue(mapping.Id, out var existing))
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        DuplicateId,
-                        mapping.Candidate.Location,
-                        mapping.Id.ToString(CultureInfo.InvariantCulture),
-                        existing.Candidate.DisplayName,
-                        mapping.Candidate.DisplayName));
-                }
+                if (mapping.Candidate.Domain is null)
+                    hasDefaultDomain = true;
                 else
-                {
-                    seenIds.Add(mapping.Id, mapping);
-                }
-
-                if (!mapping.Candidate.IsExcludedFromMap && emittedIds.Add(mapping.Id))
-                    accepted.Add(mapping);
+                    declaredDomains.Add(mapping.Candidate.Domain);
             }
 
+            if (hasDefaultDomain)
+                domains.Add(null);
+
+            domains.AddRange(declaredDomains);
+
+            if (domains.Count == 0)
+                return;
+
+            var classNames = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var domain in domains)
+                classNames.Add(BuildClassName(domain));
+
+            var hasConflict = false;
+
+            foreach (var conflict in conflicts)
+            {
+                if (conflict.Namespace != mapNamespace.Namespace || !classNames.Contains(conflict.Name))
+                    continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    GeneratedTypeConflict,
+                    conflict.Location,
+                    mapNamespace.Namespace + "." + conflict.Name));
+
+                hasConflict = true;
+            }
+
+            if (hasConflict)
+                return;
+
+            // Report only when sanitizing changed the name, and only in a compilation
+            // that actually emits the lookup.
+            if (mapNamespace.SanitizedFrom is not null)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    SanitizedNamespace,
+                    Location.None,
+                    mapNamespace.SanitizedFrom,
+                    mapNamespace.Namespace));
+            }
+
+            var classBlocks = new List<string>();
+
+            foreach (var domain in domains)
+            {
+                var seenIds = new Dictionary<int, TypeIdMappingModel>();
+                var emittedIds = new HashSet<int>();
+                var accepted = new List<TypeIdMappingModel>();
+
+                // Duplicate detection is per domain - the same ID in another domain is not
+                // a collision. Excluded types still share their domain's ID space, so they
+                // are checked, while lookup cases are selected independently from
+                // non-excluded mappings so an excluded type's earlier ID claim cannot
+                // suppress an included case.
+                foreach (var mapping in mappings)
+                {
+                    if (!string.Equals(mapping.Candidate.Domain, domain, StringComparison.Ordinal))
+                        continue;
+
+                    if (seenIds.TryGetValue(mapping.Id, out var existing))
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            DuplicateId,
+                            mapping.Candidate.Location,
+                            mapping.Id.ToString(CultureInfo.InvariantCulture),
+                            existing.Candidate.DisplayName,
+                            mapping.Candidate.DisplayName));
+                    }
+                    else
+                    {
+                        seenIds.Add(mapping.Id, mapping);
+                    }
+
+                    if (!mapping.Candidate.IsExcludedFromMap && emittedIds.Add(mapping.Id))
+                        accepted.Add(mapping);
+                }
+
+                classBlocks.Add(BuildMapClass(BuildClassName(domain), domain, accepted));
+            }
+
+            var writer = new CodegenTextWriter();
+
+            writer.Write($$"""
+            // <auto-generated/>
+
+            #nullable enable
+
+            namespace {{mapNamespace.Namespace}}
+            {
+                {{string.Join("\n\n", classBlocks)}}
+            }
+            """);
+
+            context.AddSource("TypeIdMap.g.cs", writer.GetContents().Replace("\r\n", "\n"));
+        }
+
+        // The domain becomes the prefix exactly as spelled, without normalization.
+        private static string BuildClassName(string? domain)
+        {
+            return domain is null ? GeneratedMapName : domain + GeneratedMapName;
+        }
+
+        private static string BuildMapClass(string className, string? domain, List<TypeIdMappingModel> accepted)
+        {
             var typeCases = new List<string>();
             var idCases = new List<string>();
 
@@ -379,60 +504,55 @@ namespace Moquestra.TypeIds.SourceGenerator
                 idCases.Add($"case \"{mapping.Candidate.FullName}\" when type == typeof({typeofExpression}): id = {id}; return true;");
             }
 
+            var summary = domain is null
+                ? "/// Provides a source-generated bidirectional mapping between the\n/// <c>[TypeId]</c>-annotated types included in this map and their\n/// integer IDs."
+                : $"/// Provides a source-generated bidirectional mapping between the\n/// <c>[TypeId]</c>-annotated types included in this map for the\n/// '{domain}' domain and their integer IDs.";
+
             var writer = new CodegenTextWriter();
 
             writer.Write($$"""
-            // <auto-generated/>
-
-            #nullable enable
-
-            namespace {{mapNamespace.Namespace}}
+            /// <summary>
+            {{summary}}
+            /// </summary>
+            public static class {{className}}
             {
                 /// <summary>
-                /// Provides a source-generated bidirectional mapping between the
-                /// <c>[TypeId]</c>-annotated types included in this map and their
-                /// integer IDs.
+                /// Attempts to get the type mapped to the specified ID.
                 /// </summary>
-                public static class TypeIdMap
+                /// <param name="id">The ID to look up.</param>
+                /// <param name="type">The type mapped to the specified ID, or <see langword="null"/> if no mapping exists.</param>
+                /// <returns><see langword="true"/> if the specified ID is mapped to a type; otherwise, <see langword="false"/>.</returns>
+                public static bool TryGetType(int id, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out global::System.Type? type)
                 {
-                    /// <summary>
-                    /// Attempts to get the type mapped to the specified ID.
-                    /// </summary>
-                    /// <param name="id">The ID to look up.</param>
-                    /// <param name="type">The type mapped to the specified ID, or <see langword="null"/> if no mapping exists.</param>
-                    /// <returns><see langword="true"/> if the specified ID is mapped to a type; otherwise, <see langword="false"/>.</returns>
-                    public static bool TryGetType(int id, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out global::System.Type? type)
+                    switch (id)
                     {
-                        switch (id)
-                        {
-                            {{string.Join("\n", typeCases)}}
-                            default: type = null; return false;
-                        }
+                        {{string.Join("\n", typeCases)}}
+                        default: type = null; return false;
                     }
+                }
 
-                    /// <summary>
-                    /// Attempts to get the ID mapped to the specified type.
-                    /// </summary>
-                    /// <param name="type">The type to look up. Cannot be <see langword="null"/>.</param>
-                    /// <param name="id">The ID mapped to the specified type, or 0 if no mapping exists.</param>
-                    /// <returns><see langword="true"/> if the specified type is mapped to an ID; otherwise, <see langword="false"/>.</returns>
-                    /// <exception cref="global::System.ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-                    public static bool TryGetId(global::System.Type type, out int id)
+                /// <summary>
+                /// Attempts to get the ID mapped to the specified type.
+                /// </summary>
+                /// <param name="type">The type to look up. Cannot be <see langword="null"/>.</param>
+                /// <param name="id">The ID mapped to the specified type, or 0 if no mapping exists.</param>
+                /// <returns><see langword="true"/> if the specified type is mapped to an ID; otherwise, <see langword="false"/>.</returns>
+                /// <exception cref="global::System.ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+                public static bool TryGetId(global::System.Type type, out int id)
+                {
+                    if (type is null)
+                        throw new global::System.ArgumentNullException(nameof(type));
+
+                    switch (type.FullName)
                     {
-                        if (type is null)
-                            throw new global::System.ArgumentNullException(nameof(type));
-
-                        switch (type.FullName)
-                        {
-                            {{string.Join("\n", idCases)}}
-                            default: id = 0; return false;
-                        }
+                        {{string.Join("\n", idCases)}}
+                        default: id = 0; return false;
                     }
                 }
             }
             """);
 
-            context.AddSource("TypeIdMap.g.cs", writer.GetContents().Replace("\r\n", "\n"));
+            return writer.GetContents();
         }
 
         // Mirrors Type.IsGenericType: a type nested in a generic type is itself generic
@@ -529,6 +649,8 @@ namespace Moquestra.TypeIds.SourceGenerator
                 string? alias,
                 bool hasInvalidAlias,
                 bool isExcludedFromMap,
+                string? domain,
+                bool hasInvalidDomain,
                 bool isGenericType,
                 bool isAccessible,
                 Location location)
@@ -540,6 +662,8 @@ namespace Moquestra.TypeIds.SourceGenerator
                 Alias = alias;
                 HasInvalidAlias = hasInvalidAlias;
                 IsExcludedFromMap = isExcludedFromMap;
+                Domain = domain;
+                HasInvalidDomain = hasInvalidDomain;
                 IsGenericType = isGenericType;
                 IsAccessible = isAccessible;
                 Location = location;
@@ -558,6 +682,10 @@ namespace Moquestra.TypeIds.SourceGenerator
             public bool HasInvalidAlias { get; }
 
             public bool IsExcludedFromMap { get; }
+
+            public string? Domain { get; }
+
+            public bool HasInvalidDomain { get; }
 
             public bool IsGenericType { get; }
 
