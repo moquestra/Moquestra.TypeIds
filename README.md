@@ -17,8 +17,8 @@ Use it when you need a small, stable identifier for a .NET type:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Moquestra.TypeIds" Version="1.0.0" />
-  <PackageReference Include="Moquestra.TypeIds.SourceGenerator" Version="1.0.0" PrivateAssets="all" />
+  <PackageReference Include="Moquestra.TypeIds" Version="1.1.0" />
+  <PackageReference Include="Moquestra.TypeIds.SourceGenerator" Version="1.1.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -30,9 +30,18 @@ The runtime library works on its own; the source generator is optional. Library 
 - Source generator: requires a Roslyn 4.3+ compiler host: .NET SDK 6.0.400+ or Visual Studio 2022 17.3+. IDE design-time support also requires a compatible Roslyn host; if generated code is missing only in the editor, update the IDE. If the build reports warning CS9057 and `TypeIdMap` is missing, the host compiler is too old. Generated code compiles under C# 8.0 or later.
 - Trimming and Native AOT: `AddFromAssembly` discovers types through reflection, so trimmed deployments can remove annotated types and silently skip them. Prefer the source generator there; its `typeof` references keep the mapped types rooted.
 
+### Unity
+
+Install both packages with [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity); the analyzer label that Unity requires for source generators is applied automatically. The minimum supported Unity version is 2022.3 LTS.
+
+- Unity does not pass a root namespace to the compiler, so the generated namespace falls back to the assembly name. In the default `Assembly-CSharp` assembly the fallback is sanitized to `Assembly_CSharp.Generated` and reported with warning MQTID006.
+- To control the names without an asmdef, configure them with `TypeIdMapName` (see [Map names](#map-names)). Alternatively, place the types in an asmdef whose name is usable as a namespace.
+
 ## Usage
 
 ```csharp
+[assembly: TypeIdMapName("Moquestra.TypeIds.Sample.{Domain}Ids")]
+
 [TypeId(1)] sealed class LoginRequest { }
 [TypeId(2)] sealed class LoginResponse { }
 [TypeId]    sealed class HeartbeatCommand { }
@@ -60,10 +69,12 @@ registry.TryGetId(typeof(LoginRequest), out var id);
 registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
 registry.TryGetId(typeof(KickNotification), out var kickId);
 registry.TryGetType(2, out var type);
+SessionIds.TryGetId(typeof(KickNotification), out var sessionMapId);
 
 Console.WriteLine($"typeof(LoginRequest) -> {id}");
 Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
 Console.WriteLine($"typeof(KickNotification) -> {kickId}");
+Console.WriteLine($"SessionIds: typeof(KickNotification) -> {sessionMapId}");
 Console.WriteLine($"2 -> {type}");
 ```
 
@@ -73,6 +84,7 @@ Output:
 typeof(LoginRequest) -> 1
 typeof(HeartbeatCommand) -> -416631049
 typeof(KickNotification) -> -2036228135
+SessionIds: typeof(KickNotification) -> -2036228135
 2 -> Moquestra.TypeIds.Sample.LoginResponse
 ```
 
@@ -97,22 +109,36 @@ Lookups always take a `Type` or an ID; an alias is consumed when the ID is compu
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly and generates mappings for those that generated code can access unless `ExcludeFromGeneratedMap` is true. The mappings live in map classes generated in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available: types without a domain go to `TypeIdMap`, and each domain declared with `Domain = "Session"` gets its own `SessionTypeIdMap` named with the domain as a prefix. Domains are case-sensitive and used exactly as declared. A domain must start with an ASCII letter or underscore and contain only ASCII letters, digits, and underscores; an invalid name produces error MQTID007. When the root namespace or assembly name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006: invalid characters become `_`, a segment gains a leading `_` when it starts with a character that is valid only after the first position (such as a digit) or matches a reserved C# keyword, and an empty segment becomes `_`. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly and generates mappings for those that generated code can access unless `ExcludeFromGeneratedMap` is true. When no map name is configured (see Map names), the mappings live in map classes generated in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available: types without a domain go to `TypeIdMap`, and each domain declared with `Domain = "Session"` gets its own `SessionTypeIdMap` named with the domain as a prefix. Domains are case-sensitive and used exactly as declared; an invalid domain name produces error MQTID007. When the root namespace or assembly name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
 
 Install the generator package alongside the runtime package as shown in Installation. The generated lookup methods mirror the registry's lookup API:
 
 ```csharp
 Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetType(2, out var mappedType);
 Moquestra.TypeIds.Sample.Generated.TypeIdMap.TryGetId(typeof(LoginRequest), out var mappedId);
-Moquestra.TypeIds.Sample.Generated.SessionTypeIdMap.TryGetId(typeof(KickNotification), out var kickMapId);
+Moquestra.TypeIds.Sample.SessionIds.TryGetId(typeof(KickNotification), out var sessionMapId);
 ```
 
 - IDs are determined at compile time using the same rules as the runtime registry, so generated and runtime mappings use the same ID for every type handled by both paths.
-- Assemblies with distinct root namespaces get distinct lookup names, so their maps can be referenced side by side.
+- Fallback-named maps in assemblies with distinct root namespaces get distinct lookup names, so they can be referenced side by side.
 - The registry remains available for cases the generator cannot cover, such as assemblies loaded at runtime.
 - Set `ExcludeFromGeneratedMap = true`, as in `[TypeId(1, ExcludeFromGeneratedMap = true)]`, to keep a type out of the generated map. The flag does not affect runtime registration, so the generated map can be a subset of the types registered by an assembly scan. The generator still includes excluded types when detecting duplicate IDs, and the map is generated even when every annotated type is excluded.
 - A domain partitions only the generated maps: `TypeIdMap` keeps only the types without a domain, while `AddFromAssembly` considers annotated types from every domain.
 - Duplicate IDs are detected per domain (MQTID003), so the same ID can be reused across domains. `AddFromAssembly` still throws when reused IDs are scanned into one registry, so use the generated maps when IDs overlap across domains, or register non-conflicting subsets into separate registries with `Add(Type)`.
+
+### Map names
+
+The full name of each generated map can be configured with assembly-level `TypeIdMapName` attributes:
+
+```csharp
+[assembly: TypeIdMapName("Game.Ids")]                      // the default domain's map
+[assembly: TypeIdMapName("Game.{Domain}Map")]              // a template for every named domain
+[assembly: TypeIdMapName("Game.AuthIds", Domain = "Auth")] // one domain's map
+```
+
+- Without `Domain`, a designation names the default map. When the name contains a `{Domain}` token, it instead provides a template for every named domain, with each domain name substituted for the token. A designation for one domain overrides the template, and maps without any designation keep their fallback names.
+- A name is case-sensitive and used exactly as written; the exact validation rules live in the attribute documentation. Invalid names are rejected with error MQTID008, duplicate designations with error MQTID009, and colliding final names with error MQTID010; a designation for a domain no type belongs to is reported as warning MQTID011.
+- When every map has a configured name, the fallback namespace (and its MQTID006 warning) is not used. Configured names must differ across assemblies that are referenced together; the generator cannot detect cross-assembly collisions, which surface as compiler errors in the consuming project.
 
 The generator reports these diagnostics:
 
@@ -125,3 +151,7 @@ The generator reports these diagnostics:
 | MQTID005 | Error | The annotated type is a generic type, which is not supported. |
 | MQTID006 | Warning | The root namespace or assembly name could not be used directly as a namespace, so it was sanitized. |
 | MQTID007 | Error | The annotated type declares an invalid domain name. |
+| MQTID008 | Error | The configured map name is invalid. |
+| MQTID009 | Error | More than one map name designation has the same target. |
+| MQTID010 | Error | Two generated maps would use the same full name. |
+| MQTID011 | Warning | A map name designation targets a domain no type belongs to. |
