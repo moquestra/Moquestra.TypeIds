@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-27
+
+### Added
+
+- `ExcludeFromGeneratedMap` on `[TypeId]` to keep a type out of the generated
+  map while leaving runtime registration unaffected.
+- Domain-scoped generated maps: types declared with
+  `[TypeId(..., Domain = "Auth")]` share the Auth domain's map (`AuthTypeIdMap`
+  under fallback naming). Duplicate IDs are detected per domain, and invalid
+  domain names produce `MQTID007`. Domains are a source-generator concept;
+  runtime registration and ID computation ignore them.
+- `TypeIdMapName` assembly attributes to configure the full name of each
+  generated map, including a `{Domain}` template for named domains and
+  per-domain overrides, with diagnostics `MQTID008`-`MQTID011`.
+
+### Fixed
+
+- Automatically derived map namespaces are now sanitized when the project's
+  root namespace or assembly name cannot be used directly. The generator
+  reports the substitution with warning `MQTID006`; for example, Unity's
+  default `Assembly-CSharp` assembly now generates maps under
+  `Assembly_CSharp.Generated`.
+
+Verified on Unity 2022.3 LTS and Unity 6 (6000.3).
+
 ## [1.0.0] - 2026-08-13
 
 ### Added
