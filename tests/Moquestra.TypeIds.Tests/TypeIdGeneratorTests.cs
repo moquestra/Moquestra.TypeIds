@@ -148,6 +148,29 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Run_WithWhitespaceOnlyAlias_ReportsInvalidAliasError()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId("   ")]
+                public sealed class Message { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID002", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+
+            Assert.Contains("Message", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.True(diagnostic.Location.IsInSource);
+
+            Assert.DoesNotContain("Message", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void Run_WithNullAlias_ReportsInvalidAliasError()
         {
             var (diagnostics, generated, _) = Run("""

@@ -415,6 +415,15 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void Add_WithWhitespaceOnlyAlias_ThrowsArgumentException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(string), "   "));
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(string), "\t\n"));
+        }
+
+        [Fact]
         public void Add_WithSameAliasForAnotherType_ThrowsWithExistingTypeInMessage()
         {
             var registry = new TypeIdRegistry();

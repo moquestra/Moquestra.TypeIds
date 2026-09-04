@@ -60,9 +60,9 @@ namespace Moquestra.TypeIds
         /// Using the type's previous full name as the alias preserves the previous computed ID, maintaining compatibility with persisted data.
         /// </summary>
         /// <param name="type">The type to register. Cannot be <see langword="null"/> or a generic type.</param>
-        /// <param name="alias">The alias used to compute the ID. Cannot be <see langword="null"/> or empty.</param>
+        /// <param name="alias">The alias used to compute the ID. Cannot be <see langword="null"/>, empty, or whitespace-only.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> or <paramref name="alias"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="alias"/> is empty, the type is a generic type, the type is already mapped to an ID, or the computed ID is already mapped to another type.</exception>
+        /// <exception cref="ArgumentException"><paramref name="alias"/> is empty or whitespace-only, the type is a generic type, the type is already mapped to an ID, or the computed ID is already mapped to another type.</exception>
         public void Add(Type type, string alias)
         {
             if (type is null)
@@ -71,8 +71,8 @@ namespace Moquestra.TypeIds
             if (alias is null)
                 throw new ArgumentNullException(nameof(alias));
 
-            if (alias.Length == 0)
-                throw new ArgumentException("Alias cannot be empty.", nameof(alias));
+            if (string.IsNullOrWhiteSpace(alias))
+                throw new ArgumentException("Alias cannot be empty or whitespace-only.", nameof(alias));
 
             Add(type, TypeIdHelpers.ComputeId(alias));
         }
@@ -83,7 +83,7 @@ namespace Moquestra.TypeIds
         /// </summary>
         /// <param name="type">The type to register. Cannot be <see langword="null"/> or a generic type, and must have a <see cref="TypeIdAttribute"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the type is a generic type, a computed ID is required but the type has no full name, the declared alias is empty, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
+        /// <exception cref="ArgumentException">The type does not have a <see cref="TypeIdAttribute"/>, the type is a generic type, a computed ID is required but the type has no full name, the declared alias is empty or whitespace-only, the type is already mapped to an ID, or the resolved ID is already mapped to another type.</exception>
         public void Add(Type type)
         {
             if (type is null)
@@ -105,7 +105,7 @@ namespace Moquestra.TypeIds
         /// <param name="assembly">The assembly to scan. Cannot be <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is <see langword="null"/>.</exception>
         /// <exception cref="ReflectionTypeLoadException">The assembly contains types that cannot be loaded.</exception>
-        /// <exception cref="ArgumentException">A scanned type is a generic type, requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
+        /// <exception cref="ArgumentException">A scanned type is a generic type, requires a computed ID but has no full name, its declared alias is empty or whitespace-only, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
         /// Types registered before the exception remain in the registry; the scan follows the assembly's type enumeration order, which is unspecified.</exception>
         public void AddFromAssembly(Assembly assembly)
         {
@@ -124,7 +124,7 @@ namespace Moquestra.TypeIds
         /// <param name="predicate">The predicate that selects the types to register. Cannot be <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="assembly"/> or <paramref name="predicate"/> is <see langword="null"/>.</exception>
         /// <exception cref="ReflectionTypeLoadException">The assembly contains types that cannot be loaded.</exception>
-        /// <exception cref="ArgumentException">A type selected by the predicate is a generic type, requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
+        /// <exception cref="ArgumentException">A type selected by the predicate is a generic type, requires a computed ID but has no full name, its declared alias is empty or whitespace-only, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
         /// Types registered before the exception remain in the registry; the scan follows the assembly's type enumeration order, which is unspecified.</exception>
         public void AddFromAssembly(Assembly assembly, Func<Type, bool> predicate)
         {
