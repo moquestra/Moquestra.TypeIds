@@ -1,6 +1,15 @@
 ; Shipped analyzer releases
 ; https://github.com/dotnet/roslyn-analyzers/blob/main/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
+## Release 1.2.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+MQTID012 | Moquestra.TypeIds | Warning | Domains differing only by casing
+MQTID013 | Moquestra.TypeIds | Warning | Generated constant name collision
+
 ## Release 1.1.0
 
 ### New Rules
