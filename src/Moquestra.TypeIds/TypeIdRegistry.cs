@@ -112,11 +112,41 @@ namespace Moquestra.TypeIds
             if (assembly is null)
                 throw new ArgumentNullException(nameof(assembly));
 
+            AddFromAssemblyCore(assembly, null);
+        }
+
+        /// <summary>
+        /// Registers the types in the assembly that have a <see cref="TypeIdAttribute"/> and pass the predicate.
+        /// Types without the attribute are ignored without evaluating the predicate.
+        /// If a selected type declares an alias, the ID is computed from the alias instead of the type's full name.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan. Cannot be <see langword="null"/>.</param>
+        /// <param name="predicate">The predicate that selects the types to register. Cannot be <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="assembly"/> or <paramref name="predicate"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ReflectionTypeLoadException">The assembly contains types that cannot be loaded.</exception>
+        /// <exception cref="ArgumentException">A type selected by the predicate is a generic type, requires a computed ID but has no full name, its declared alias is empty, the type is already mapped to an ID, or its resolved ID is already mapped to another type.
+        /// Types registered before the exception remain in the registry; the scan follows the assembly's type enumeration order, which is unspecified.</exception>
+        public void AddFromAssembly(Assembly assembly, Func<Type, bool> predicate)
+        {
+            if (assembly is null)
+                throw new ArgumentNullException(nameof(assembly));
+
+            if (predicate is null)
+                throw new ArgumentNullException(nameof(predicate));
+
+            AddFromAssemblyCore(assembly, predicate);
+        }
+
+        private void AddFromAssemblyCore(Assembly assembly, Func<Type, bool>? predicate)
+        {
             foreach (var type in assembly.GetTypes())
             {
                 var attribute = type.GetCustomAttribute<TypeIdAttribute>(inherit: false);
 
                 if (attribute is null)
+                    continue;
+
+                if (predicate is not null && !predicate(type))
                     continue;
 
                 Add(type, attribute);
