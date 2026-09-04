@@ -17,8 +17,8 @@ Use it when you need a small, stable identifier for a .NET type:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Moquestra.TypeIds" Version="1.1.0" />
-  <PackageReference Include="Moquestra.TypeIds.SourceGenerator" Version="1.1.0" PrivateAssets="all" />
+  <PackageReference Include="Moquestra.TypeIds" Version="1.2.0" />
+  <PackageReference Include="Moquestra.TypeIds.SourceGenerator" Version="1.2.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -71,10 +71,17 @@ registry.TryGetId(typeof(KickNotification), out var kickId);
 registry.TryGetType(2, out var type);
 SessionIds.TryGetId(typeof(KickNotification), out var sessionMapId);
 
+var kickLabel = sessionMapId switch
+{
+    SessionIds.KickNotification => "kick",
+    _ => "unknown",
+};
+
 Console.WriteLine($"typeof(LoginRequest) -> {id}");
 Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
 Console.WriteLine($"typeof(KickNotification) -> {kickId}");
 Console.WriteLine($"SessionIds: typeof(KickNotification) -> {sessionMapId}");
+Console.WriteLine($"SessionIds.KickNotification -> {kickLabel}");
 Console.WriteLine($"2 -> {type}");
 ```
 
@@ -85,6 +92,7 @@ typeof(LoginRequest) -> 1
 typeof(HeartbeatCommand) -> -416631049
 typeof(KickNotification) -> -2036228135
 SessionIds: typeof(KickNotification) -> -2036228135
+SessionIds.KickNotification -> kick
 2 -> Moquestra.TypeIds.Sample.LoginResponse
 ```
 
@@ -95,7 +103,7 @@ SessionIds: typeof(KickNotification) -> -2036228135
 - A string alias supplied through `[TypeId("Session.Kick")]` or `Add(type, "Session.Kick")` is hashed instead of the type's full name, so changing the type's name or namespace does not change the ID.
 - An ID computed from the type's full name changes when the type is renamed or moved to another namespace. To preserve compatibility with persisted data, use the type's previous full name as its alias; this preserves the previous computed ID.
 - If a full name or alias hashes to an ID already mapped to another type, registration throws; assign an explicit ID to either type to resolve the collision.
-- `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry.
+- `AddFromAssembly` registers every type in the assembly that has a `TypeIdAttribute`. Types without the attribute are ignored, and types registered before a conflict remain in the registry. An `AddFromAssembly(assembly, predicate)` overload registers only the annotated types the predicate selects; types without the attribute are never evaluated.
 - Declaring `Domain`, as in `[TypeId("Session.Kick", Domain = "Session")]`, affects only the source-generated maps: `AddFromAssembly` and `Add` ignore it, and it plays no part in ID computation. See Source generator.
 - If a type or ID is already mapped, `Add` throws an `ArgumentException` identifying the existing mapping. Rejected duplicate registrations leave the registry unchanged.
 - `TryGetType` and `TryGetId` return `false` when no mapping exists for the supplied ID or type.
@@ -109,7 +117,7 @@ Lookups always take a `Type` or an ID; an alias is consumed when the ID is compu
 
 ## Source generator
 
-The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly and generates mappings for those that generated code can access unless `ExcludeFromGeneratedMap` is true. When no map name is configured (see Map names), the mappings live in map classes generated in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available: types without a domain go to `TypeIdMap`, and each domain declared with `Domain = "Session"` gets its own `SessionTypeIdMap` named with the domain as a prefix. Domains are case-sensitive and used exactly as declared; an invalid domain name produces error MQTID007. When the root namespace or assembly name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime.
+The `Moquestra.TypeIds.SourceGenerator` package provides a compile-time alternative to the runtime registry. It collects `[TypeId]`-annotated types from the current assembly and generates mappings for those that generated code can access unless `ExcludeFromGeneratedMap` is true. When no map name is configured (see Map names), the mappings live in map classes generated in the project's `<RootNamespace>.Generated` namespace, falling back to the assembly name when no root namespace is available: types without a domain go to `TypeIdMap`, and each domain declared with `Domain = "Session"` gets its own `SessionTypeIdMap` named with the domain as a prefix. Domains are case-sensitive and used exactly as declared; an invalid domain name produces error MQTID007, and domains that differ only by casing are flagged with warning MQTID012. When the root namespace or assembly name cannot be used directly as a namespace, the generator sanitizes it and reports the substitution with warning MQTID006. Its lookup methods use switch statements, so no registration, reflection, or dictionary is needed at runtime, and every mapped ID is also exposed on the map as a `public const int` named after the type.
 
 Install the generator package alongside the runtime package as shown in Installation. The generated lookup methods mirror the registry's lookup API:
 
@@ -120,6 +128,8 @@ Moquestra.TypeIds.Sample.SessionIds.TryGetId(typeof(KickNotification), out var s
 ```
 
 - IDs are determined at compile time using the same rules as the runtime registry, so generated and runtime mappings use the same ID for every type handled by both paths.
+- The generated constants are usable wherever a constant expression is required, such as switch case labels or attribute arguments, and the generated lookups reference them. When a constant name would collide with another type's name or a reserved member, the related constants are skipped with warning MQTID013; the lookup methods are unaffected.
+- Each map is generated into its own file named after the map's full name. File names that would collide case-insensitively are disambiguated with a hash suffix.
 - Fallback-named maps in assemblies with distinct root namespaces get distinct lookup names, so they can be referenced side by side.
 - The registry remains available for cases the generator cannot cover, such as assemblies loaded at runtime.
 - Set `ExcludeFromGeneratedMap = true`, as in `[TypeId(1, ExcludeFromGeneratedMap = true)]`, to keep a type out of the generated map. The flag does not affect runtime registration, so the generated map can be a subset of the types registered by an assembly scan. The generator still includes excluded types when detecting duplicate IDs, and the map is generated even when every annotated type is excluded.
@@ -145,7 +155,7 @@ The generator reports these diagnostics:
 | ID | Severity | Description |
 |---|---|---|
 | MQTID001 | Warning | The annotated type is not accessible to the generated lookup and is skipped. |
-| MQTID002 | Error | The annotated type declares a null or empty alias. |
+| MQTID002 | Error | The annotated type declares a null, empty, or whitespace-only alias. |
 | MQTID003 | Error | An ID is mapped to more than one type. |
 | MQTID004 | Error | The generated lookup type conflicts with an existing type in the assembly. |
 | MQTID005 | Error | The annotated type is a generic type, which is not supported. |
@@ -155,3 +165,5 @@ The generator reports these diagnostics:
 | MQTID009 | Error | More than one map name designation has the same target. |
 | MQTID010 | Error | Two generated maps would use the same full name. |
 | MQTID011 | Warning | A map name designation targets a domain no type belongs to. |
+| MQTID012 | Warning | Two domains differ only by casing. |
+| MQTID013 | Warning | A generated constant name collides with another type's name or a reserved member. |
