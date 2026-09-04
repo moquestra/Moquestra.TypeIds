@@ -37,8 +37,8 @@ namespace Moquestra.TypeIds.SourceGenerator
 
         private static readonly DiagnosticDescriptor InvalidAlias = new DiagnosticDescriptor(
             "MQTID002",
-            "Alias cannot be null or empty",
-            "Type '{0}' declares a null or empty alias, so an ID cannot be computed",
+            "Alias cannot be null, empty, or whitespace-only",
+            "Type '{0}' declares a null, empty, or whitespace-only alias, so an ID cannot be computed",
             "Moquestra.TypeIds",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -192,7 +192,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                     if (id != 0)
                         explicitId = id;
                 }
-                else if (argument.Value is string aliasValue && aliasValue.Length > 0)
+                else if (argument.Value is string aliasValue && !string.IsNullOrWhiteSpace(aliasValue))
                 {
                     alias = aliasValue;
                 }
