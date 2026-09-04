@@ -1923,6 +1923,80 @@ namespace Moquestra.TypeIds.Tests
             Assert.NotEqual(names[0].ToUpperInvariant(), names[1].ToUpperInvariant());
         }
 
+        [Fact]
+        public void Run_WithDomainsDifferingOnlyByCasing_ReportsCaseTwinWarningAndGeneratesBothMaps()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(2, Domain = "auth")]
+                public sealed class Logout { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID012", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+
+            Assert.Contains("'auth'", diagnostic.GetMessage(), StringComparison.Ordinal);
+            Assert.Contains("'Auth'", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.True(diagnostic.Location.IsInSource);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+            Assert.Contains("class authTypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithThreeDomainCasingVariants_ReportsWarningForEachAdditionalVariant()
+        {
+            var (diagnostics, _, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class First { }
+
+                [TypeId(2, Domain = "auth")]
+                public sealed class Second { }
+
+                [TypeId(3, Domain = "AUTH")]
+                public sealed class Third { }
+                """);
+
+            Assert.Equal(2, diagnostics.Length);
+            Assert.All(diagnostics, static diagnostic => Assert.Equal("MQTID012", diagnostic.Id));
+        }
+
+        [Fact]
+        public void Run_WithCaseTwinDomainsAndDistinctMapNames_GeneratesFileNamesWithoutHashSuffixes()
+        {
+            var (diagnostics, _, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("First.Ids", Domain = "Auth")]
+                [assembly: TypeIdMapName("Second.Ids", Domain = "auth")]
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+
+                [TypeId(2, Domain = "auth")]
+                public sealed class Logout { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID012", diagnostic.Id);
+
+            var names = output.SyntaxTrees.Skip(1).Select(static tree => Path.GetFileName(tree.FilePath)).ToList();
+
+            Assert.Contains("First.Ids.g.cs", names);
+            Assert.Contains("Second.Ids.g.cs", names);
+        }
+
         private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource, Compilation Output) Run(string source, string? rootNamespace = null, string? assemblyName = "GeneratorTestAssembly")
         {
             var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp11);

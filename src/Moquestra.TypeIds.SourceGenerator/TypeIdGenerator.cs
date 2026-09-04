@@ -115,6 +115,14 @@ namespace Moquestra.TypeIds.SourceGenerator
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor CaseTwinDomains = new DiagnosticDescriptor(
+            "MQTID012",
+            "Domains differ only by casing",
+            "Domain '{0}' differs from domain '{1}' only by casing; domain names are case-sensitive and treated as distinct, so use consistent casing if this is a typo",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
         private static readonly DiagnosticDescriptor ConstantNameCollision = new DiagnosticDescriptor(
             "MQTID013",
             "Generated constant name collision",
@@ -483,6 +491,32 @@ namespace Moquestra.TypeIds.SourceGenerator
                     hasDefaultDeclaration = true;
                 else
                     declaredDomainNames.Add(candidate.Domain);
+            }
+
+            // Warn once at the first declaration of each additional casing variant.
+            var seenSpellings = new HashSet<string>(StringComparer.Ordinal);
+            var firstSpellings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.HasInvalidDomain || candidate.Domain is null)
+                    continue;
+
+                if (!seenSpellings.Add(candidate.Domain))
+                    continue;
+
+                if (firstSpellings.TryGetValue(candidate.Domain, out var firstSpelling))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        CaseTwinDomains,
+                        candidate.Location,
+                        candidate.Domain,
+                        firstSpelling));
+                }
+                else
+                {
+                    firstSpellings.Add(candidate.Domain, candidate.Domain);
+                }
             }
 
             var designationCounts = new Dictionary<(bool IsDefault, string Domain), int>();
