@@ -513,6 +513,8 @@ namespace Moquestra.TypeIds.Tests
 
             Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
 
+            Assert.True(diagnostic.Location.IsInSource);
+
             Assert.Contains("Assembly-CSharp", diagnostic.GetMessage(), StringComparison.Ordinal);
             Assert.Contains("Assembly_CSharp.Generated", diagnostic.GetMessage(), StringComparison.Ordinal);
             Assert.Contains("namespace Assembly_CSharp.Generated", generated, StringComparison.Ordinal);

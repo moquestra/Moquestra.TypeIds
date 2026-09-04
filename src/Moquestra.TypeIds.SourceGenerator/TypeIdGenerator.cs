@@ -711,11 +711,13 @@ namespace Moquestra.TypeIds.SourceGenerator
                 return;
 
             // Report only when the generated code uses the sanitized fallback prefix.
+            // A diagnostic without a location does not show up as a Unity console entry,
+            // so anchor it to the first [TypeId] type.
             if (usesFallbackName && mapNamespace.SanitizedFrom is not null)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     SanitizedNamespace,
-                    Location.None,
+                    candidates[0].Location,
                     mapNamespace.SanitizedFrom,
                     mapNamespace.Namespace));
             }
