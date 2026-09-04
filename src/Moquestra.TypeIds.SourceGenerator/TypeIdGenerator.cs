@@ -115,6 +115,14 @@ namespace Moquestra.TypeIds.SourceGenerator
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor ConstantNameCollision = new DiagnosticDescriptor(
+            "MQTID013",
+            "Generated constant name collision",
+            "Generated constant name '{0}' collides with another type's name or a reserved member in map '{1}', so the related constants are not generated; lookup methods are unaffected",
+            "Moquestra.TypeIds",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
         /// <inheritdoc/>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -208,6 +216,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 BuildTypeofExpression(symbol),
                 BuildFullName(symbol),
                 symbol.ToDisplayString(),
+                symbol.Name,
                 explicitId,
                 alias,
                 hasInvalidAlias,
@@ -723,7 +732,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                     namespaceOrder.Add(targetNamespace);
                 }
 
-                blocks.Add(BuildMapClass(className, domain, accepted));
+                blocks.Add(BuildMapClass(targetNamespace, className, domain, accepted, BuildConstantNames(context, targetNamespace, className, accepted)));
             }
 
             var namespaceTexts = new List<string>();
@@ -805,8 +814,69 @@ namespace Moquestra.TypeIds.SourceGenerator
             return true;
         }
 
-        private static string BuildMapClass(string className, string? domain, List<TypeIdMappingModel> accepted)
+        // The lookup methods, plus the object members a constant would hide with a CS0108 warning.
+        private static readonly HashSet<string> ReservedConstantNames = new HashSet<string>(StringComparer.Ordinal)
         {
+            "TryGetType",
+            "TryGetId",
+            "ToString",
+            "Equals",
+            "ReferenceEquals",
+            "GetHashCode",
+            "GetType",
+            "MemberwiseClone",
+        };
+
+        // Constant names are the types' simple names as-is. When a name matches
+        // another type's name or a reserved member, all related constants are
+        // skipped instead of picking one.
+        private static Dictionary<TypeIdMappingModel, string> BuildConstantNames(SourceProductionContext context, string targetNamespace, string className, List<TypeIdMappingModel> accepted)
+        {
+            var nameOrder = new List<string>();
+            var nameGroups = new Dictionary<string, List<TypeIdMappingModel>>(StringComparer.Ordinal);
+
+            foreach (var mapping in accepted)
+            {
+                var name = mapping.Candidate.SimpleName;
+
+                if (!nameGroups.TryGetValue(name, out var group))
+                {
+                    group = new List<TypeIdMappingModel>();
+                    nameGroups.Add(name, group);
+                    nameOrder.Add(name);
+                }
+
+                group.Add(mapping);
+            }
+
+            var names = new Dictionary<TypeIdMappingModel, string>();
+
+            foreach (var name in nameOrder)
+            {
+                var group = nameGroups[name];
+                var isReserved = name == className || ReservedConstantNames.Contains(name);
+
+                if (group.Count > 1 || isReserved)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ConstantNameCollision,
+                        group[0].Candidate.Location,
+                        name,
+                        targetNamespace + "." + className));
+
+                    continue;
+                }
+
+                names.Add(group[0], name);
+            }
+
+            return names;
+        }
+
+        private static string BuildMapClass(string targetNamespace, string className, string? domain, List<TypeIdMappingModel> accepted, Dictionary<TypeIdMappingModel, string> constantNames)
+        {
+            var mapQualifier = "global::" + targetNamespace + "." + className + ".";
+            var constants = new List<string>();
             var typeCases = new List<string>();
             var idCases = new List<string>();
 
@@ -814,14 +884,70 @@ namespace Moquestra.TypeIds.SourceGenerator
             {
                 var typeofExpression = mapping.Candidate.TypeofExpression;
                 var id = mapping.Id.ToString(CultureInfo.InvariantCulture);
+                var hasConstant = constantNames.TryGetValue(mapping, out var constantName);
+                var idExpression = hasConstant ? mapQualifier + constantName : id;
 
-                typeCases.Add($"case {id}: type = typeof({typeofExpression}); return true;");
-                idCases.Add($"case \"{mapping.Candidate.FullName}\" when type == typeof({typeofExpression}): id = {id}; return true;");
+                if (hasConstant)
+                {
+                    constants.Add(
+                        $"/// <summary>The ID mapped to <see cref=\"{typeofExpression}\"/>.</summary>\npublic const int {constantName} = {id};");
+                }
+
+                typeCases.Add($"case {idExpression}: type = typeof({typeofExpression}); return true;");
+                idCases.Add($"case \"{mapping.Candidate.FullName}\" when type == typeof({typeofExpression}): id = {idExpression}; return true;");
             }
 
             var summary = domain is null
                 ? "/// Provides a source-generated bidirectional mapping between the\n/// <c>[TypeId]</c>-annotated types included in this map and their\n/// integer IDs."
                 : $"/// Provides a source-generated bidirectional mapping between the\n/// <c>[TypeId]</c>-annotated types included in this map for the\n/// '{domain}' domain and their integer IDs.";
+
+            var memberBlocks = new List<string>(constants);
+
+            var tryGetTypeWriter = new CodeBuilder();
+
+            tryGetTypeWriter.Write($$"""
+            /// <summary>
+            /// Attempts to get the type mapped to the specified ID.
+            /// </summary>
+            /// <param name="id">The ID to look up.</param>
+            /// <param name="type">The type mapped to the specified ID, or <see langword="null"/> if no mapping exists.</param>
+            /// <returns><see langword="true"/> if the specified ID is mapped to a type; otherwise, <see langword="false"/>.</returns>
+            public static bool TryGetType(int id, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out global::System.Type? type)
+            {
+                switch (id)
+                {
+                    {{string.Join("\n", typeCases)}}
+                    default: type = null; return false;
+                }
+            }
+            """);
+
+            memberBlocks.Add(tryGetTypeWriter.ToString());
+
+            var tryGetIdWriter = new CodeBuilder();
+
+            tryGetIdWriter.Write($$"""
+            /// <summary>
+            /// Attempts to get the ID mapped to the specified type.
+            /// </summary>
+            /// <param name="type">The type to look up. Cannot be <see langword="null"/>.</param>
+            /// <param name="id">The ID mapped to the specified type, or 0 if no mapping exists.</param>
+            /// <returns><see langword="true"/> if the specified type is mapped to an ID; otherwise, <see langword="false"/>.</returns>
+            /// <exception cref="global::System.ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+            public static bool TryGetId(global::System.Type type, out int id)
+            {
+                if (type is null)
+                    throw new global::System.ArgumentNullException(nameof(type));
+
+                switch (type.FullName)
+                {
+                    {{string.Join("\n", idCases)}}
+                    default: id = 0; return false;
+                }
+            }
+            """);
+
+            memberBlocks.Add(tryGetIdWriter.ToString());
 
             var writer = new CodeBuilder();
 
@@ -831,39 +957,7 @@ namespace Moquestra.TypeIds.SourceGenerator
             /// </summary>
             public static class {{className}}
             {
-                /// <summary>
-                /// Attempts to get the type mapped to the specified ID.
-                /// </summary>
-                /// <param name="id">The ID to look up.</param>
-                /// <param name="type">The type mapped to the specified ID, or <see langword="null"/> if no mapping exists.</param>
-                /// <returns><see langword="true"/> if the specified ID is mapped to a type; otherwise, <see langword="false"/>.</returns>
-                public static bool TryGetType(int id, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out global::System.Type? type)
-                {
-                    switch (id)
-                    {
-                        {{string.Join("\n", typeCases)}}
-                        default: type = null; return false;
-                    }
-                }
-
-                /// <summary>
-                /// Attempts to get the ID mapped to the specified type.
-                /// </summary>
-                /// <param name="type">The type to look up. Cannot be <see langword="null"/>.</param>
-                /// <param name="id">The ID mapped to the specified type, or 0 if no mapping exists.</param>
-                /// <returns><see langword="true"/> if the specified type is mapped to an ID; otherwise, <see langword="false"/>.</returns>
-                /// <exception cref="global::System.ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-                public static bool TryGetId(global::System.Type type, out int id)
-                {
-                    if (type is null)
-                        throw new global::System.ArgumentNullException(nameof(type));
-
-                    switch (type.FullName)
-                    {
-                        {{string.Join("\n", idCases)}}
-                        default: id = 0; return false;
-                    }
-                }
+                {{string.Join("\n\n", memberBlocks)}}
             }
             """);
 
@@ -960,6 +1054,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 string typeofExpression,
                 string fullName,
                 string displayName,
+                string simpleName,
                 int? explicitId,
                 string? alias,
                 bool hasInvalidAlias,
@@ -973,6 +1068,7 @@ namespace Moquestra.TypeIds.SourceGenerator
                 TypeofExpression = typeofExpression;
                 FullName = fullName;
                 DisplayName = displayName;
+                SimpleName = simpleName;
                 ExplicitId = explicitId;
                 Alias = alias;
                 HasInvalidAlias = hasInvalidAlias;
@@ -989,6 +1085,8 @@ namespace Moquestra.TypeIds.SourceGenerator
             public string FullName { get; }
 
             public string DisplayName { get; }
+
+            public string SimpleName { get; }
 
             public int? ExplicitId { get; }
 
