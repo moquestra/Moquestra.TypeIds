@@ -1874,6 +1874,55 @@ namespace Moquestra.TypeIds.Tests
             Assert.DoesNotContain("public const int Excluded", generated, StringComparison.Ordinal);
         }
 
+        [Fact]
+        public void Run_WithDefaultAndDomainMaps_EmitsOneFilePerMap()
+        {
+            var (diagnostics, _, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+
+                [TypeId(2, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            var paths = output.SyntaxTrees.Skip(1).Select(static tree => tree.FilePath).ToList();
+
+            Assert.Equal(2, paths.Count);
+            Assert.Contains(paths, static path => path.EndsWith("GeneratorTestAssembly.Generated.TypeIdMap.g.cs", StringComparison.Ordinal));
+            Assert.Contains(paths, static path => path.EndsWith("GeneratorTestAssembly.Generated.AuthTypeIdMap.g.cs", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void Run_WithMapNamesDifferingOnlyByCasing_GeneratesDistinctFileNames()
+        {
+            var (diagnostics, _, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [assembly: TypeIdMapName("Twin.Ids")]
+                [assembly: TypeIdMapName("twin.Ids", Domain = "Auth")]
+
+                [TypeId(1)]
+                public sealed class Message { }
+
+                [TypeId(2, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            var names = output.SyntaxTrees.Skip(1).Select(static tree => Path.GetFileName(tree.FilePath)).ToList();
+
+            Assert.Equal(2, names.Count);
+            Assert.Contains(names, static name => name.StartsWith("Twin.Ids.", StringComparison.Ordinal) && name.EndsWith(".g.cs", StringComparison.Ordinal));
+            Assert.Contains(names, static name => name.StartsWith("twin.Ids.", StringComparison.Ordinal) && name.EndsWith(".g.cs", StringComparison.Ordinal));
+
+            Assert.NotEqual(names[0].ToUpperInvariant(), names[1].ToUpperInvariant());
+        }
+
         private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource, Compilation Output) Run(string source, string? rootNamespace = null, string? assemblyName = "GeneratorTestAssembly")
         {
             var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp11);
