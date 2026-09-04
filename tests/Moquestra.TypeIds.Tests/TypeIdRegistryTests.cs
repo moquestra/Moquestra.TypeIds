@@ -252,6 +252,53 @@ namespace Moquestra.TypeIds.Tests
         }
 
         [Fact]
+        public void AddFromAssembly_WithPredicate_RegistersOnlyMatchingTypes()
+        {
+            var registry = new TypeIdRegistry();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly, static type => type == typeof(AnnotatedMessage));
+
+            Assert.True(registry.TryGetId(typeof(AnnotatedMessage), out var id));
+            Assert.Equal(10, id);
+
+            Assert.False(registry.TryGetId(typeof(AliasedMessage), out _));
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithPredicate_EvaluatesOnlyAnnotatedTypes()
+        {
+            var registry = new TypeIdRegistry();
+            var evaluated = new List<Type>();
+
+            registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly, type =>
+            {
+                evaluated.Add(type);
+                return false;
+            });
+
+            Assert.Contains(typeof(AnnotatedMessage), evaluated);
+            Assert.DoesNotContain(typeof(UnannotatedMessage), evaluated);
+
+            Assert.False(registry.TryGetId(typeof(AnnotatedMessage), out _));
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithNullPredicate_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.AddFromAssembly(typeof(TypeIdRegistryTests).Assembly, null!));
+        }
+
+        [Fact]
+        public void AddFromAssembly_WithNullAssemblyUsingPredicateOverload_ThrowsArgumentNullException()
+        {
+            var registry = new TypeIdRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.AddFromAssembly(null!, static type => true));
+        }
+
+        [Fact]
         public void Add_WithParameterlessTypeIdAttribute_MapsComputedNegativeId()
         {
             var registry = new TypeIdRegistry();
