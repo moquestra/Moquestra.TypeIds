@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-05
+
+### Added
+
+- Generated ID constants: each map exposes its mapped IDs as `public const int`
+  members named after their types, and its lookup methods use those constants.
+  Constants with colliding names are skipped with the new `MQTID013` warning.
+- One generated file per map, named after the map's full name; names colliding
+  case-insensitively are disambiguated with a hash suffix.
+- The new warning `MQTID012` when domains differ only by casing.
+- An `AddFromAssembly(assembly, predicate)` overload that registers only the
+  annotated types the predicate selects.
+
+### Fixed
+
+- Whitespace-only aliases are now rejected by both the runtime registry and
+  the source generator (`MQTID002`), matching the existing empty-alias rule.
+- `MQTID006` is now reported on the first `[TypeId]`-annotated type so the
+  sanitized-namespace warning appears in the Unity Console.
+
+### Changed
+
+- The source generator now uses Moquestra.CodeWriter internally instead of
+  CodegenCS. This dependency change leaves generated output unchanged and removes
+  `CodegenCS.Core.dll` and `THIRD-PARTY-NOTICES.txt` from the generator package.
+
 ## [1.1.0] - 2026-08-27
 
 ### Added
