@@ -63,6 +63,12 @@ namespace Moquestra.TypeIds.Sample
             // The assembly attribute above names the Session domain map SessionIds:
             SessionIds.TryGetId(typeof(KickNotification), out var sessionMapId);
 
+            var kickLabel = sessionMapId switch
+            {
+                SessionIds.KickNotification => "kick",
+                _ => "unknown",
+            };
+
             registry.TryGetId(typeof(LoginRequest), out var id);
             registry.TryGetId(typeof(HeartbeatCommand), out var heartbeatId);
             registry.TryGetId(typeof(KickNotification), out var kickId);
@@ -72,6 +78,7 @@ namespace Moquestra.TypeIds.Sample
             Console.WriteLine($"typeof(HeartbeatCommand) -> {heartbeatId}");
             Console.WriteLine($"typeof(KickNotification) -> {kickId}");
             Console.WriteLine($"SessionIds: typeof(KickNotification) -> {sessionMapId}");
+            Console.WriteLine($"SessionIds.KickNotification -> {kickLabel}");
             Console.WriteLine($"2 -> {type}");
         }
     }

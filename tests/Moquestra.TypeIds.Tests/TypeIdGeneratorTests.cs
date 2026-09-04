@@ -1674,6 +1674,206 @@ namespace Moquestra.TypeIds.Tests
             Assert.Equal(string.Empty, generated);
         }
 
+        [Fact]
+        public void Run_WithAnnotatedType_GeneratesIdConstant()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Message { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("public const int Message = 1;", generated, StringComparison.Ordinal);
+            Assert.Contains("""The ID mapped to <see cref="global::Message"/>.""", generated, StringComparison.Ordinal);
+
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.TypeIdMap.Message: type = typeof(global::Message); return true;", generated, StringComparison.Ordinal);
+            Assert.Contains("id = global::GeneratorTestAssembly.Generated.TypeIdMap.Message; return true;", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithComputedAndAliasIds_GeneratesIdConstants()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId]
+                public sealed class Hashed { }
+
+                [TypeId("wire-name")]
+                public sealed class Aliased { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("public const int Hashed = ", generated, StringComparison.Ordinal);
+            Assert.Contains("public const int Aliased = ", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithDomainType_GeneratesConstantInDomainMap()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1, Domain = "Auth")]
+                public sealed class Login { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("class AuthTypeIdMap", generated, StringComparison.Ordinal);
+            Assert.Contains("public const int Login = 1;", generated, StringComparison.Ordinal);
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.AuthTypeIdMap.Login: type = typeof(global::Login); return true;", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithDuplicateSimpleNames_ReportsConstantCollisionAndSkipsConstants()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                namespace First
+                {
+                    [TypeId(1)]
+                    public sealed class Message { }
+                }
+
+                namespace Second
+                {
+                    [TypeId(2)]
+                    public sealed class Message { }
+                }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID013", diagnostic.Id);
+
+            Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+
+            Assert.Contains("Message", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.True(diagnostic.Location.IsInSource);
+
+            Assert.DoesNotContain("public const int Message", generated, StringComparison.Ordinal);
+
+            Assert.Contains("case 1: type = typeof(global::First.Message); return true;", generated, StringComparison.Ordinal);
+            Assert.Contains("case 2: type = typeof(global::Second.Message); return true;", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithTypeNameMatchingLookupMethod_ReportsConstantCollisionAndSkipsConstant()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class TryGetId { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID013", diagnostic.Id);
+
+            Assert.DoesNotContain("public const int TryGetId", generated, StringComparison.Ordinal);
+
+            Assert.Contains("case 1: type = typeof(global::TryGetId); return true;", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithTypeNameMatchingMapName_ReportsConstantCollisionAndSkipsConstant()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                namespace Elsewhere
+                {
+                    [TypeId(1)]
+                    public sealed class TypeIdMap { }
+                }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID013", diagnostic.Id);
+
+            Assert.DoesNotContain("public const int TypeIdMap", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithParameterAndPatternLikeTypeNames_QualifiesConstantReferences()
+        {
+            var (diagnostics, generated, output) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class id { }
+
+                [TypeId(2)]
+                public sealed class type { }
+
+                [TypeId(3)]
+                public sealed class not { }
+
+                [TypeId(4)]
+                public sealed class _ { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.TypeIdMap.id: ", generated, StringComparison.Ordinal);
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.TypeIdMap.type: ", generated, StringComparison.Ordinal);
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.TypeIdMap.not: ", generated, StringComparison.Ordinal);
+            Assert.Contains("case global::GeneratorTestAssembly.Generated.TypeIdMap._: ", generated, StringComparison.Ordinal);
+            Assert.Contains("id = global::GeneratorTestAssembly.Generated.TypeIdMap.type; return true;", generated, StringComparison.Ordinal);
+
+            Assert.Empty(output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
+        public void Run_WithTypeNameMatchingObjectMember_ReportsConstantCollisionAndSkipsConstant()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class ToString { }
+                """);
+
+            var diagnostic = Assert.Single(diagnostics);
+
+            Assert.Equal("MQTID013", diagnostic.Id);
+
+            Assert.Contains("GeneratorTestAssembly.Generated.TypeIdMap", diagnostic.GetMessage(), StringComparison.Ordinal);
+
+            Assert.DoesNotContain("public const int ToString", generated, StringComparison.Ordinal);
+
+            Assert.Contains("case 1: type = typeof(global::ToString); return true;", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Run_WithExcludedType_GeneratesNoConstant()
+        {
+            var (diagnostics, generated, _) = Run("""
+                using Moquestra.TypeIds;
+
+                [TypeId(1)]
+                public sealed class Included { }
+
+                [TypeId(2, ExcludeFromGeneratedMap = true)]
+                public sealed class Excluded { }
+                """);
+
+            Assert.Empty(diagnostics);
+
+            Assert.Contains("public const int Included = 1;", generated, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("public const int Excluded", generated, StringComparison.Ordinal);
+        }
+
         private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource, Compilation Output) Run(string source, string? rootNamespace = null, string? assemblyName = "GeneratorTestAssembly")
         {
             var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp11);
