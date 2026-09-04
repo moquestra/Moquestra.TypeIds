@@ -5,4 +5,5 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+MQTID012 | Moquestra.TypeIds | Warning | Domains differing only by casing
 MQTID013 | Moquestra.TypeIds | Warning | Generated constant name collision
